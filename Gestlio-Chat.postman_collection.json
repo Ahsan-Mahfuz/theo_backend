@@ -1,0 +1,128 @@
+{
+  "info": {
+    "name": "Gestlio – Chat (Theo Backend)",
+    "description": "Real-time chat. REST handles conversation setup, history (pagination) and file upload. Sending / editing / deleting / typing / read-receipts all happen over Socket.io — see SOCKET-EVENTS.md.\n\nSocket connect:\n  const socket = io(\"http://localhost:6050\", { auth: { token: \"<JWT>\" } });\n\nEMIT:  message:send, message:edit, message:delete, conversation:join, conversation:leave, typing:start, typing:stop, messages:read, user:online\nLISTEN: message:new, message:edited, message:deleted, notification:message, typing:start, typing:stop, messages:read, users:online, message:error\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- hostToken / cleanerToken (JWTs)\n- receiverId, conversationId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "hostToken", "value": "" },
+    { "key": "cleanerToken", "value": "" },
+    { "key": "receiverId", "value": "" },
+    { "key": "conversationId", "value": "" },
+    { "key": "messageId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Start / get conversation",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"receiverId\": \"{{receiverId}}\"\n}" },
+        "url": { "raw": "{{baseUrl}}/chat/conversation", "host": ["{{baseUrl}}"], "path": ["chat", "conversation"] },
+        "description": "Creates or returns the 1-to-1 conversation between the logged-in user and receiverId. Use the returned _id as conversationId."
+      }
+    },
+    {
+      "name": "My conversations (inbox)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/chat/conversations?page=1&limit=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["chat", "conversations"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" }
+          ]
+        },
+        "description": "Conversation list with last message + unreadCount per conversation."
+      }
+    },
+    {
+      "name": "Get messages (paginated)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/chat/{{conversationId}}/messages?page=1&limit=30",
+          "host": ["{{baseUrl}}"],
+          "path": ["chat", "{{conversationId}}", "messages"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "30" }
+          ]
+        },
+        "description": "Message history, newest first. Messages the user deleted 'for me' are excluded."
+      }
+    },
+    {
+      "name": "Send message (text and/or image — one call)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "text", "value": "Hello", "type": "text", "description": "optional if a file is attached" },
+            { "key": "file", "type": "file", "src": [], "description": "optional image/pdf/file" }
+          ]
+        },
+        "url": { "raw": "{{baseUrl}}/chat/{{conversationId}}/messages", "host": ["{{baseUrl}}"], "path": ["chat", "{{conversationId}}", "messages"] },
+        "description": "Send in ONE call. Provide:\n- text only  → text-only message\n- file only  → image/file message\n- text + file → caption + image\nAt least one is required. The server saves the message AND broadcasts message:new over socket in real time."
+      }
+    },
+    {
+      "name": "Upload file (then emit message:send)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+        "body": {
+          "mode": "formdata",
+          "formdata": [{ "key": "file", "type": "file", "src": [] }]
+        },
+        "url": { "raw": "{{baseUrl}}/chat/upload", "host": ["{{baseUrl}}"], "path": ["chat", "upload"] },
+        "description": "Allowed: images, pdf, doc/docx, xls/xlsx, txt (max 10MB).\nReturns { fileUrl, fileName, fileSize, messageType }.\nThen send over socket:\n  message:send {\n    \"conversationId\": \"{{conversationId}}\",\n    \"messageType\": \"image\",\n    \"fileUrl\": \"/uploads/profiles/xxx.jpg\",\n    \"fileName\": \"photo.jpg\",\n    \"fileSize\": 204800\n  }"
+      }
+    },
+    {
+      "name": "Edit message",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"content\": \"Updated message text\"\n}" },
+        "url": { "raw": "{{baseUrl}}/chat/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["chat", "messages", "{{messageId}}"] },
+        "description": "Text messages only; only the sender can edit. Sets isEdited=true and broadcasts message:edited over socket."
+      }
+    },
+    {
+      "name": "Delete message",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"deleteFor\": \"everyone\"\n}" },
+        "url": { "raw": "{{baseUrl}}/chat/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["chat", "messages", "{{messageId}}"] },
+        "description": "deleteFor: \"everyone\" (sender only, wipes for all → isDeleted=true) | \"me\" (hides only for you → adds you to deletedFor). Broadcasts message:deleted over socket."
+      }
+    },
+    {
+      "name": "Mark messages as read",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+        "url": { "raw": "{{baseUrl}}/chat/{{conversationId}}/read", "host": ["{{baseUrl}}"], "path": ["chat", "{{conversationId}}", "read"] },
+        "description": "Marks all incoming messages in the conversation as read (isRead=true, status=read). Broadcasts messages:read over socket."
+      }
+    }
+  ]
+}

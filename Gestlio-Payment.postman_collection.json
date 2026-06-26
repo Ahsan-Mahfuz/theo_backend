@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "Gestlio – Payment (Stripe Connect Escrow)",
+    "description": "Stripe Connect escrow payments (USD, multi-country).\n\nFlow:\n1) Cleaner onboards a Connect payout account (connect/onboard -> open URL).\n2) Cleaner accepts a schedule (status 'accepted').\n3) Host pays -> funds HELD in the platform balance (escrow).\n4) Cleaner does the work + submits proof.\n5) Host approves via PATCH /schedule/:id/complete -> 95% auto-transferred to the cleaner, platform keeps 5%.\n\nThe webhook (POST /payment/webhook) is called by Stripe, not from Postman. Use the Stripe CLI:\n  stripe listen --forward-to localhost:6050/api/v1/payment/webhook\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- cleanerToken, hostToken, adminToken (JWTs)\n- scheduleId, paymentId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "cleanerToken", "value": "" },
+    { "key": "hostToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "scheduleId", "value": "" },
+    { "key": "paymentId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Cleaner: Connect onboarding",
+      "item": [
+        {
+          "name": "Onboard / get onboarding URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cleanerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"country\": \"US\"\n}" },
+            "url": { "raw": "{{baseUrl}}/payment/connect/onboard", "host": ["{{baseUrl}}"], "path": ["payment", "connect", "onboard"] },
+            "description": "country is ISO-2 (US, FR, GB...). Returns { url, accountId }. Open url in a browser to finish Stripe Express onboarding. NOTE: Stripe does not support payouts to all countries (e.g. Bangladesh is not supported)."
+          }
+        },
+        {
+          "name": "Connect status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/payment/connect/status", "host": ["{{baseUrl}}"], "path": ["payment", "connect", "status"] },
+            "description": "Refreshes from Stripe. Returns { onboarded, payoutsEnabled, detailsSubmitted }. payoutsEnabled must be true before a host can pay."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Host: pay (escrow hold)",
+      "item": [
+        {
+          "name": "Pay for schedule",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/payment/schedule/{{scheduleId}}/pay", "host": ["{{baseUrl}}"], "path": ["payment", "schedule", "{{scheduleId}}", "pay"] },
+            "description": "Schedule must be 'accepted' and the cleaner must have payoutsEnabled. Returns { paymentId, paymentIntentClientSecret, ephemeralKey, customerId, publishableKey, amount, currency }.\n\nConfirm the payment client-side:\n- Mobile: Stripe PaymentSheet with customerId + ephemeralKey + paymentIntentClientSecret + publishableKey.\n- Web: Stripe.js / Elements with paymentIntentClientSecret + publishableKey.\nTest card: 4242 4242 4242 4242, any future date, any CVC."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Listings",
+      "item": [
+        {
+          "name": "My payments (host or cleaner)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/payment/my?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["payment", "my"],
+              "query": [
+                { "key": "status", "value": "", "description": "pending | paid_held | released | refunded | failed" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin: all payments",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/payment?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["payment"],
+              "query": [
+                { "key": "status", "value": "" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin: refund held payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Dispute resolved in host's favour\"\n}" },
+        "url": { "raw": "{{baseUrl}}/payment/{{paymentId}}/refund", "host": ["{{baseUrl}}"], "path": ["payment", "{{paymentId}}", "refund"] },
+        "description": "Refunds a payment that is still 'paid_held' (escrow) back to the host."
+      }
+    },
+    {
+      "name": "Release (host approves work)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+        "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}/complete", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}", "complete"] },
+        "description": "This is the existing schedule endpoint. Blocked (400) unless paymentStatus = paid_held. On success it transfers 95% to the cleaner's Connect account and marks the payment 'released'."
+      }
+    }
+  ]
+}

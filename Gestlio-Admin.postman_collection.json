@@ -1,0 +1,178 @@
+{
+  "info": {
+    "name": "Gestlio – Admin Dashboard",
+    "description": "Admin-only analytics & management APIs for the dashboard, hosts, cleaners, jobs (schedules), transactions, and support.\n\nAll endpoints require an admin JWT.\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- adminToken (admin JWT)\n- hostId, cleanerId, userId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "adminToken", "value": "" },
+    { "key": "hostId", "value": "" },
+    { "key": "cleanerId", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Dashboard (overview)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/admin/dashboard?range=this_month",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "dashboard"],
+          "query": [{ "key": "range", "value": "this_month", "description": "this_month | all" }]
+        },
+        "description": "Returns cards (totalRevenue=platform commission, totalHosts, totalCleaners, totalCompletedJobs), donut chart (completed vs cancelled), todayStatus (jobCreate, completed), and recentSupport."
+      }
+    },
+    {
+      "name": "Hosts",
+      "item": [
+        {
+          "name": "List hosts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/hosts?search=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "hosts"],
+              "query": [
+                { "key": "search", "value": "", "description": "name / email" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Each row includes properties, scheduleCleaning, totalPay."
+          }
+        },
+        {
+          "name": "Host details (info panel)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/hosts/{{hostId}}", "host": ["{{baseUrl}}"], "path": ["admin", "hosts", "{{hostId}}"] },
+            "description": "Returns totalProperties, totalSchedules, totalPay."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cleaners",
+      "item": [
+        {
+          "name": "List cleaners",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/cleaners?search=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "cleaners"],
+              "query": [
+                { "key": "search", "value": "", "description": "name / email / SIRET" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Each row includes siretNumber, completedJobs, totalEarn."
+          }
+        },
+        {
+          "name": "Cleaner details (info panel)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/cleaners/{{cleanerId}}", "host": ["{{baseUrl}}"], "path": ["admin", "cleaners", "{{cleanerId}}"] },
+            "description": "Returns completedJobs, totalEarning."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs / Schedules",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/admin/schedules?status=&paymentStatus=&page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "schedules"],
+          "query": [
+            { "key": "status", "value": "", "description": "scheduled | accepted | completed | refused | ..." },
+            { "key": "paymentStatus", "value": "", "description": "unpaid | paid_held | released | refunded" },
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Job list with accommodation, host, cleaner, status — for the New Schedule / job details screens."
+      }
+    },
+    {
+      "name": "Transactions",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/admin/transactions?status=&page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["admin", "transactions"],
+          "query": [
+            { "key": "status", "value": "", "description": "pending | paid_held | released | refunded | failed" },
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Payment list: hostName, email, transactionNumber, amount, status, dateTime."
+      }
+    },
+    {
+      "name": "Block / unblock user",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"block\": true\n}" },
+        "url": { "raw": "{{baseUrl}}/admin/users/{{userId}}/block", "host": ["{{baseUrl}}"], "path": ["admin", "users", "{{userId}}", "block"] },
+        "description": "block: true -> deactivates the account (isActive=false, can't log in). block: false -> re-enables."
+      }
+    },
+    {
+      "name": "Support (existing module)",
+      "item": [
+        {
+          "name": "List support tickets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/support?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["support"],
+              "query": [
+                { "key": "status", "value": "", "description": "open | resolved" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resolve a ticket",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"resolved\"\n}" },
+            "url": { "raw": "{{baseUrl}}/support/:id", "host": ["{{baseUrl}}"], "path": ["support", ":id"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        }
+      ]
+    }
+  ]
+}

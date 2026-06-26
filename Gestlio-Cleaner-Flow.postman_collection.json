@@ -1,0 +1,449 @@
+{
+  "info": {
+    "name": "Gestlio – Cleaner Flow (Theo Backend)",
+    "description": "Assignment, Schedule, Chat (Socket.io), and Notification APIs.\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- hostToken  (JWT of a host)\n- cleanerToken (JWT of a cleaner)\n- accommodationId, cleanerId, assignmentId, scheduleId, conversationId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "hostToken", "value": "" },
+    { "key": "cleanerToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "accommodationId", "value": "" },
+    { "key": "cleanerId", "value": "" },
+    { "key": "assignmentId", "value": "" },
+    { "key": "scheduleId", "value": "" },
+    { "key": "conversationId", "value": "" },
+    { "key": "receiverId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Profile (setup profile / update)",
+      "item": [
+        {
+          "name": "Cleaner: setup profile (full onboarding)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "firstName", "value": "Sophie", "type": "text", "description": "optional" },
+                { "key": "lastName", "value": "Martin", "type": "text", "description": "optional" },
+                { "key": "phone", "value": "+33612345678", "type": "text", "description": "optional" },
+                { "key": "siretNumber", "value": "12345678901234", "type": "text", "description": "14 digits -> sets isProfessionalVerified=true, kycLevel=1" },
+                { "key": "workCity", "value": "London", "type": "text", "description": "Where do you work? -> your city" },
+                { "key": "serviceRadius", "value": "15", "type": "text", "description": "service area radius in km (1-100)" },
+                { "key": "availability", "value": "full_time", "type": "text", "description": "full_time | part_time | flexible" },
+                { "key": "licenseNumber", "value": "44920", "type": "text", "description": "identification / licence number" },
+                { "key": "biography", "value": "Tell us a little bit about yourself or your professional background.", "type": "text", "description": "optional biography" },
+                { "key": "interventionZone", "value": "Paris 11th and surroundings", "type": "text" },
+                { "key": "languages", "value": "French,English", "type": "text", "description": "comma separated" },
+                { "key": "servicesOffered", "value": "Ironing of laundry,Window cleaning,Tidying and organization", "type": "text", "description": "comma separated" },
+                { "key": "about", "value": "Professional housekeeper with several years of experience.", "type": "text" },
+                { "key": "playerId", "value": "onesignal-player-id-here", "type": "text", "description": "for push notifications" },
+                { "key": "profileImage", "type": "file", "src": [], "description": "Add profile photo" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/auth/update-me", "host": ["{{baseUrl}}"], "path": ["auth", "update-me"] }
+          }
+        },
+        {
+          "name": "Host: update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "firstName", "value": "John", "type": "text" },
+                { "key": "lastName", "value": "Doe", "type": "text" },
+                { "key": "phone", "value": "+33698765432", "type": "text" },
+                { "key": "playerId", "value": "onesignal-player-id-here", "type": "text" },
+                { "key": "profileImage", "type": "file", "src": [] }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/auth/update-me", "host": ["{{baseUrl}}"], "path": ["auth", "update-me"] }
+          }
+        },
+        {
+          "name": "Get my profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assignment (host assigns cleaners)",
+      "item": [
+        {
+          "name": "Find housekeepers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/assignment/housekeepers?search=&interventionZone=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignment", "housekeepers"],
+              "query": [
+                { "key": "search", "value": "" },
+                { "key": "interventionZone", "value": "" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get cleaner profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/assignment/housekeepers/{{cleanerId}}", "host": ["{{baseUrl}}"], "path": ["assignment", "housekeepers", "{{cleanerId}}"] }
+          }
+        },
+        {
+          "name": "Assign cleaner (Add Housekeeper)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cleanerId\": \"{{cleanerId}}\",\n  \"role\": \"primary\",\n  \"pricePerCleaning\": 55,\n  \"message\": \"Looking for a trust worthy person for regular cleaning\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/assignment/{{accommodationId}}/assign", "host": ["{{baseUrl}}"], "path": ["assignment", "{{accommodationId}}", "assign"] }
+          }
+        },
+        {
+          "name": "Get accommodation's assigned cleaners",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/assignment/{{accommodationId}}/cleaners", "host": ["{{baseUrl}}"], "path": ["assignment", "{{accommodationId}}", "cleaners"] }
+          }
+        },
+        {
+          "name": "Change cleaner role (primary <-> substitute)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"primary\"\n}" },
+            "url": { "raw": "{{baseUrl}}/assignment/{{assignmentId}}/role", "host": ["{{baseUrl}}"], "path": ["assignment", "{{assignmentId}}", "role"] }
+          }
+        },
+        {
+          "name": "Remove cleaner from accommodation",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/assignment/{{assignmentId}}", "host": ["{{baseUrl}}"], "path": ["assignment", "{{assignmentId}}"] }
+          }
+        },
+        {
+          "name": "Cleaner: my requests (inbox)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/assignment/my-requests?status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignment", "my-requests"],
+              "query": [
+                { "key": "status", "value": "pending" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cleaner: accept / refuse request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cleanerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"action\": \"accept\"\n}" },
+            "url": { "raw": "{{baseUrl}}/assignment/{{assignmentId}}/respond", "host": ["{{baseUrl}}"], "path": ["assignment", "{{assignmentId}}", "respond"] }
+          }
+        },
+        {
+          "name": "Cleaner: my accepted accommodations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/assignment/my-accommodations?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["assignment", "my-accommodations"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Schedule (Proceed to Schedule)",
+      "item": [
+        {
+          "name": "Host: create schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"date\": \"2026-05-15\",\n  \"checkInTime\": \"10:00\",\n  \"checkOutTime\": \"14:00\",\n  \"notes\": \"Please arrive within the indicated time slot\"\n}" },
+            "url": { "raw": "{{baseUrl}}/schedule/{{accommodationId}}", "host": ["{{baseUrl}}"], "path": ["schedule", "{{accommodationId}}"] }
+          }
+        },
+        {
+          "name": "Host: my schedules",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/schedule/host?status=&page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["schedule", "host"], "query": [{ "key": "status", "value": "" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Cleaner: my schedules",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/schedule/cleaner?status=&page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["schedule", "cleaner"], "query": [{ "key": "status", "value": "" }, { "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
+          }
+        },
+        {
+          "name": "Cleaner: accept / refuse schedule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cleanerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"action\": \"accept\"\n}" },
+            "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}/respond", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}", "respond"] },
+            "description": "action: accept | refuse. On accept -> status 'accepted' (host can pay). On refuse -> status 'refused' and the accommodation is freed."
+          }
+        },
+        {
+          "name": "Get schedule by id (host or cleaner)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}"] }
+          }
+        },
+        {
+          "name": "Cleaner: submit proof (photos + notes)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "proofNotes", "value": "All rooms cleaned.", "type": "text" },
+                { "key": "photos", "type": "file", "src": [] },
+                { "key": "photos", "type": "file", "src": [] }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}/submit-proof", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}", "submit-proof"] }
+          }
+        },
+        {
+          "name": "Cleaner: report a dispute",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "reason", "value": "Access issue", "type": "text" },
+                { "key": "notes", "value": "Key box code was wrong.", "type": "text" },
+                { "key": "photos", "type": "file", "src": [] }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}/dispute", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}", "dispute"] }
+          }
+        },
+        {
+          "name": "Host: complete task",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/schedule/{{scheduleId}}/complete", "host": ["{{baseUrl}}"], "path": ["schedule", "{{scheduleId}}", "complete"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat (Socket.io real-time)",
+      "item": [
+        {
+          "name": "Start / get conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"receiverId\": \"{{receiverId}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/chat/conversation", "host": ["{{baseUrl}}"], "path": ["chat", "conversation"] }
+          }
+        },
+        {
+          "name": "My conversations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/conversations?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["chat", "conversations"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "Get messages (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/{{conversationId}}/messages?page=1&limit=30", "host": ["{{baseUrl}}"], "path": ["chat", "{{conversationId}}", "messages"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "30" }] }
+          }
+        },
+        {
+          "name": "Upload file (then emit message:send over socket)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{hostToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "file", "type": "file", "src": [] }]
+            },
+            "url": { "raw": "{{baseUrl}}/chat/upload", "host": ["{{baseUrl}}"], "path": ["chat", "upload"] },
+            "description": "Returns { fileUrl, fileName, fileSize, messageType }. Then send a socket event:\nmessage:send { conversationId, content, messageType, fileUrl, fileName, fileSize }\n\nSending/editing/deleting/typing/read all happen over Socket.io — see SOCKET-EVENTS.md."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "My notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notification?page=1&limit=20&isRead=", "host": ["{{baseUrl}}"], "path": ["notification"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }, { "key": "isRead", "value": "" }] }
+          }
+        },
+        {
+          "name": "Mark all as read",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notification/read-all", "host": ["{{baseUrl}}"], "path": ["notification", "read-all"] }
+          }
+        },
+        {
+          "name": "Mark one as read",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notification/:id/read", "host": ["{{baseUrl}}"], "path": ["notification", ":id", "read"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Content (About / Terms / Privacy)",
+      "item": [
+        {
+          "name": "Get all pages (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content", "host": ["{{baseUrl}}"], "path": ["content"] }
+          }
+        },
+        {
+          "name": "Get single page (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/content/:type",
+              "host": ["{{baseUrl}}"],
+              "path": ["content", ":type"],
+              "variable": [{ "key": "type", "value": "about_us", "description": "about_us | terms_of_use | privacy_policy" }]
+            }
+          }
+        },
+        {
+          "name": "Admin: create / update page",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"<h1>About Us</h1><p>Gestlio connects hosts with trusted housekeepers.</p>\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/content/:type",
+              "host": ["{{baseUrl}}"],
+              "path": ["content", ":type"],
+              "variable": [{ "key": "type", "value": "about_us", "description": "about_us | terms_of_use | privacy_policy" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Help & Support",
+      "item": [
+        {
+          "name": "Submit support request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{hostToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"subject\": \"Billing question\",\n  \"email\": \"user@example.com\",\n  \"message\": \"Describe your request in detail...\"\n}" },
+            "url": { "raw": "{{baseUrl}}/support", "host": ["{{baseUrl}}"], "path": ["support"] }
+          }
+        },
+        {
+          "name": "Admin: list support tickets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/support?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["support"],
+              "query": [
+                { "key": "status", "value": "", "description": "open | resolved" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin: update ticket status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"resolved\"\n}" },
+            "url": { "raw": "{{baseUrl}}/support/:id", "host": ["{{baseUrl}}"], "path": ["support", ":id"], "variable": [{ "key": "id", "value": "" }] }
+          }
+        }
+      ]
+    }
+  ]
+}

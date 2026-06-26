@@ -1,0 +1,154 @@
+{
+  "info": {
+    "name": "Gestlio – Content & Support (Theo Backend)",
+    "description": "Static content pages (About Us, Terms of Use, Privacy Policy) and the Help & Support contact form.\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- userToken (JWT of any logged-in user, used to submit a support request)\n- adminToken (JWT of an admin, used to edit pages and manage tickets)\n- ticketId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "userToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "ticketId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Content (About / Terms / Privacy)",
+      "item": [
+        {
+          "name": "Get all pages (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content", "host": ["{{baseUrl}}"], "path": ["content"] }
+          }
+        },
+        {
+          "name": "Get About Us (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/about_us", "host": ["{{baseUrl}}"], "path": ["content", "about_us"] }
+          }
+        },
+        {
+          "name": "Get Terms of Use (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/terms_of_use", "host": ["{{baseUrl}}"], "path": ["content", "terms_of_use"] }
+          }
+        },
+        {
+          "name": "Get Privacy Policy (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/privacy_policy", "host": ["{{baseUrl}}"], "path": ["content", "privacy_policy"] }
+          }
+        },
+        {
+          "name": "Get Legal Notice (public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/content/legal_notice", "host": ["{{baseUrl}}"], "path": ["content", "legal_notice"] }
+          }
+        },
+        {
+          "name": "Admin: update About Us",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"<h1>About Us</h1><p>Gestlio connects hosts with trusted housekeepers.</p>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/content/about_us", "host": ["{{baseUrl}}"], "path": ["content", "about_us"] }
+          }
+        },
+        {
+          "name": "Admin: update Terms of Use",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"<h1>Terms of Use</h1><p>By using Gestlio you agree to the following terms...</p>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/content/terms_of_use", "host": ["{{baseUrl}}"], "path": ["content", "terms_of_use"] }
+          }
+        },
+        {
+          "name": "Admin: update Privacy Policy",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"<h1>Privacy Policy</h1><p>We respect your privacy. This policy explains...</p>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/content/privacy_policy", "host": ["{{baseUrl}}"], "path": ["content", "privacy_policy"] }
+          }
+        },
+        {
+          "name": "Admin: update Legal Notice",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"<h1>Legal Notice</h1><p>Gestlio is operated by ... Company registration ...</p>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/content/legal_notice", "host": ["{{baseUrl}}"], "path": ["content", "legal_notice"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Help & Support",
+      "item": [
+        {
+          "name": "Submit support request",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"subject\": \"Billing question\",\n  \"email\": \"user@example.com\",\n  \"message\": \"Describe your request in detail...\"\n}" },
+            "url": { "raw": "{{baseUrl}}/support", "host": ["{{baseUrl}}"], "path": ["support"] }
+          }
+        },
+        {
+          "name": "Admin: list support tickets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/support?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["support"],
+              "query": [
+                { "key": "status", "value": "", "description": "open | resolved" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin: update ticket status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"resolved\"\n}" },
+            "url": { "raw": "{{baseUrl}}/support/{{ticketId}}", "host": ["{{baseUrl}}"], "path": ["support", "{{ticketId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}
