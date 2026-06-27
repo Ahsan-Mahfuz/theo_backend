@@ -4,6 +4,7 @@ import { UserRoutes } from "../modules/user/user.route";
 import { AccommodationRoutes } from "../modules/accommodation/accommodation.routes";
 import { AssignmentRoutes } from "../modules/assignment/assignment.routes";
 import { ScheduleRoutes } from "../modules/schedule/schedule.routes";
+import { CalendarRoutes } from "../modules/calendar/calendar.routes";
 import { ChatRoutes } from "../modules/chat/chat.routes";
 import { NotificationRoutes } from "../modules/notification/notification.routes";
 import { ContentRoutes } from "../modules/content/content.routes";
@@ -33,6 +34,10 @@ const moduleRoutes = [
   {
     path: "/schedule",
     route: ScheduleRoutes,
+  },
+  {
+    path: "/calendar",
+    route: CalendarRoutes,
   },
   {
     path: "/chat",

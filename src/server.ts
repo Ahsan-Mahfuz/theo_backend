@@ -4,6 +4,7 @@ import config from "./app/config";
 import app from "./app";
 import { seedSuperAdmin } from "./app/utilities/adminSeeder";
 import { initSocket } from "./app/socket";
+import { startCalendarSync } from "./app/jobs/calendarSync";
 import 'dotenv/config';
 
 const httpServer = createServer(app);
@@ -17,6 +18,8 @@ async function main() {
     console.log("✅ Database connected");
 
     await seedSuperAdmin();
+
+    startCalendarSync();
 
     httpServer.listen(Number(config.port), () => {
       console.log(`🚀 Gestlio server running on port ${config.port}`);

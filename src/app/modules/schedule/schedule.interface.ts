@@ -24,6 +24,7 @@ export interface ICleaningSchedule extends Document {
   host: Types.ObjectId;
   cleaner: Types.ObjectId; // accepted primary cleaner
   assignment: Types.ObjectId; // the CleanerAssignment used
+  booking?: Types.ObjectId; // optional iCal booking this cleaning is for
 
   date: Date;
   checkInTime: string; // "10:00"

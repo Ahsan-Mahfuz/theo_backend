@@ -80,10 +80,34 @@ const getMyAccommodations = async (
     Accommodation.countDocuments(filter),
   ]);
 
-  // annotate each item with isCleanerAssigned for the UI
+  // All cleaners the host has assigned to the accommodations on this page
+  const pageIds = rows.map((a) => a._id);
+  const assignments = await CleanerAssignment.find({
+    host: hostId,
+    accommodation: { $in: pageIds },
+  })
+    .populate("cleaner", "firstName lastName name profileImage")
+    .sort({ role: 1, createdAt: -1 }); // primary first
+
+  // group assignments by accommodation id
+  const cleanersByAccommodation = new Map<string, any[]>();
+  for (const assignment of assignments) {
+    const key = String(assignment.accommodation);
+    if (!cleanersByAccommodation.has(key)) cleanersByAccommodation.set(key, []);
+    cleanersByAccommodation.get(key)!.push({
+      assignmentId: assignment._id,
+      cleaner: assignment.cleaner,
+      role: assignment.role,
+      status: assignment.status,
+      pricePerCleaning: assignment.pricePerCleaning,
+    });
+  }
+
+  // annotate each item with isCleanerAssigned + the assigned cleaners for the UI
   const data = rows.map((a) => ({
     ...a.toObject(),
     isCleanerAssigned: assignedIds.includes(String(a._id)),
+    assignedCleaners: cleanersByAccommodation.get(String(a._id)) ?? [],
   }));
 
   return {
@@ -102,7 +126,28 @@ const getAccommodationById = async (hostId: string, accommodationId: string) => 
   }).populate("host", "firstName lastName profileImage");
 
   if (!accommodation) throw new AppError(404, "Accommodation not found");
-  return accommodation;
+
+  // All cleaners the host has assigned to this accommodation (primary first)
+  const assignments = await CleanerAssignment.find({
+    host: hostId,
+    accommodation: accommodationId,
+  })
+    .populate("cleaner", "firstName lastName name profileImage")
+    .sort({ role: 1, createdAt: -1 });
+
+  const assignedCleaners = assignments.map((assignment) => ({
+    assignmentId: assignment._id,
+    cleaner: assignment.cleaner,
+    role: assignment.role,
+    status: assignment.status,
+    pricePerCleaning: assignment.pricePerCleaning,
+  }));
+
+  return {
+    ...accommodation.toObject(),
+    isCleanerAssigned: assignments.some((a) => a.status === "accepted"),
+    assignedCleaners,
+  };
 };
 
 // ─── Update Accommodation ─────────────────────────────────────────────────────

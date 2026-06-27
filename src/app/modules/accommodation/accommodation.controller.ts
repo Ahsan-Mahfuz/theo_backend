@@ -14,7 +14,7 @@ const createAccommodation = catchAsync(async (req: Request, res: Response) => {
   // Handle multiple photo uploads (formdata)
   if (req.files && Array.isArray(req.files)) {
     payload.photos = (req.files as Express.Multer.File[]).map(
-      (file) => `/uploads/accommodations/${file.filename}`,
+      (file) => `/uploads/profiles/${file.filename}`,
     );
   }
 
@@ -71,7 +71,7 @@ const updateAccommodation = catchAsync(async (req: Request, res: Response) => {
   // Handle multiple photo uploads on update
   if (req.files && Array.isArray(req.files) && req.files.length > 0) {
     payload.photos = (req.files as Express.Multer.File[]).map(
-      (file) => `/uploads/accommodations/${file.filename}`,
+      (file) => `/uploads/profiles/${file.filename}`,
     );
   }
 

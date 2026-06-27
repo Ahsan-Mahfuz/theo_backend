@@ -28,6 +28,9 @@ const scheduleSchema = new Schema<ICleaningSchedule>(
     },
     assignment: { type: Schema.Types.ObjectId, ref: "CleanerAssignment", required: true },
 
+    // optional link to an imported iCal booking this cleaning is for
+    booking: { type: Schema.Types.ObjectId, ref: "Booking", index: true },
+
     date: { type: Date, required: true },
     checkInTime: { type: String, required: true },
     checkOutTime: { type: String, required: true },

@@ -16,6 +16,7 @@ const createSchedule = async (
     checkInTime: string;
     checkOutTime: string;
     notes?: string;
+    bookingId?: string;
   },
 ) => {
   const accommodation = await Accommodation.findOne({
@@ -39,6 +40,7 @@ const createSchedule = async (
     host: hostId,
     cleaner: primary.cleaner,
     assignment: primary._id,
+    booking: payload.bookingId,
     date: new Date(payload.date),
     checkInTime: payload.checkInTime,
     checkOutTime: payload.checkOutTime,

@@ -7,6 +7,7 @@ export const createScheduleSchema = z.object({
   checkInTime: z.string().regex(timeRegex, "checkInTime must be HH:mm"),
   checkOutTime: z.string().regex(timeRegex, "checkOutTime must be HH:mm"),
   notes: z.string().optional(),
+  bookingId: z.string().optional(), // optional iCal booking to link this cleaning to
 });
 
 // proof / dispute come through multipart (photos[]); notes are optional strings

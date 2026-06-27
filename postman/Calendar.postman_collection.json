@@ -1,0 +1,153 @@
+{
+  "info": {
+    "name": "Theo Backend — Calendar (iCal + Cleaning)",
+    "description": "Calendar module: connect iCal feeds (Airbnb, Booking.com, Vrbo, Expedia, Tripadvisor, Google, Apple, Outlook, other), sync imported bookings, and view month/list combining bookings (gray) with system cleaning schedules (cleaner photo). Includes the 'Add a Manual Cleaning' path (schedule create with optional bookingId).\n\nSet collection variables: baseUrl, token (host JWT), accommodationId, connectionId, bookingId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "accommodationId", "value": "", "type": "string" },
+    { "key": "connectionId", "value": "", "type": "string" },
+    { "key": "bookingId", "value": "", "type": "string" },
+    { "key": "year", "value": "2024", "type": "string" },
+    { "key": "month", "value": "4", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Connections",
+      "item": [
+        {
+          "name": "List iCal connections",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calendar/{{accommodationId}}/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "{{accommodationId}}", "connections"]
+            },
+            "description": "Powers the 'Connect my calendars' screen. Returns each connection with platform, label, icalUrl, lastSyncedAt and lastSyncStatus."
+          }
+        },
+        {
+          "name": "Add iCal connection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var id = pm.response.json().data && pm.response.json().data._id;",
+                  "  if (id) pm.collectionVariables.set('connectionId', id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": \"airbnb\",\n  \"label\": \"Airbnb - Appartement T3\",\n  \"icalUrl\": \"https://www.airbnb.com/calendar/ical/REPLACE_ME.ics\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/calendar/{{accommodationId}}/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "{{accommodationId}}", "connections"]
+            },
+            "description": "platform is one of: airbnb, booking, vrbo, expedia, tripadvisor, google, apple, outlook, other (defaults to other). The feed is synced immediately on create. Saves the returned _id into the connectionId variable."
+          }
+        },
+        {
+          "name": "Delete connection",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calendar/connections/{{connectionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "connections", "{{connectionId}}"]
+            },
+            "description": "Removes the connection and all bookings imported from it."
+          }
+        },
+        {
+          "name": "Sync now (refresh all feeds)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calendar/{{accommodationId}}/sync",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "{{accommodationId}}", "sync"]
+            },
+            "description": "Manual 'refresh now' — re-fetches every active iCal connection for this accommodation."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Views",
+      "item": [
+        {
+          "name": "Month calendar (bookings + schedules)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calendar/{{accommodationId}}/month?year={{year}}&month={{month}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "{{accommodationId}}", "month"],
+              "query": [
+                { "key": "year", "value": "{{year}}" },
+                { "key": "month", "value": "{{month}}" }
+              ]
+            },
+            "description": "Calendar view. Returns bookings[] (gray date ranges with platform) and schedules[] (cleaner-assigned cleanings with populated cleaner profileImage/name). Days with neither = the '+' icon on the frontend."
+          }
+        },
+        {
+          "name": "List view (per booking: scheduled?)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/calendar/{{accommodationId}}/list?year={{year}}&month={{month}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["calendar", "{{accommodationId}}", "list"],
+              "query": [
+                { "key": "year", "value": "{{year}}" },
+                { "key": "month", "value": "{{month}}" }
+              ]
+            },
+            "description": "List view ('Liste' tab). Each booking joined with its linked cleaning schedule: isScheduled true/false, plus cleaner + time when scheduled."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Add a Manual Cleaning (schedule + booking link)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"date\": \"2024-04-05\",\n  \"checkInTime\": \"10:00\",\n  \"checkOutTime\": \"14:00\",\n  \"notes\": \"Cleaning after guest checkout\",\n  \"bookingId\": \"{{bookingId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/schedule/{{accommodationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["schedule", "{{accommodationId}}"]
+        },
+        "description": "Creates a cleaning schedule. bookingId is optional — pass it to link the cleaning to an imported iCal booking so the List view shows it as 'scheduled'. Requires an accepted primary cleaner on the accommodation (existing rule)."
+      }
+    }
+  ]
+}
