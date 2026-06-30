@@ -43,6 +43,19 @@ const getMyAccommodations = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ─── Host dashboard: today / upcoming / to-do ─────────────────────────────────
+
+const getHostDashboard = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await AccommodationService.getHostDashboard(hostId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Host dashboard retrieved successfully",
+    data: result,
+  });
+});
+
 // ─── Get Single Accommodation ─────────────────────────────────────────────────
 
 const getAccommodationById = catchAsync(
@@ -50,6 +63,24 @@ const getAccommodationById = catchAsync(
     const hostId = (req as any).user.userId;
     const result = await AccommodationService.getAccommodationById(
       hostId,
+      req.params.id,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Accommodation retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+// ─── Cleaner: Get Single Accommodation (requested by host) ────────────────────
+
+const getAccommodationForCleaner = catchAsync(
+  async (req: Request, res: Response) => {
+    const cleanerId = (req as any).user.userId;
+    const result = await AccommodationService.getAccommodationForCleaner(
+      cleanerId,
       req.params.id,
     );
     sendResponse(res, {
@@ -107,7 +138,9 @@ const deleteAccommodation = catchAsync(async (req: Request, res: Response) => {
 export const AccommodationController = {
   createAccommodation,
   getMyAccommodations,
+  getHostDashboard,
   getAccommodationById,
+  getAccommodationForCleaner,
   updateAccommodation,
   deleteAccommodation,
 };

@@ -58,7 +58,18 @@ const getMyConversations = async (
         isRead: false,
         deletedFor: { $ne: userId },
       });
-      return { ...c.toObject(), unreadCount };
+
+      const obj = c.toObject();
+
+      // The person on the other side of this conversation:
+      // - if I'm a cleaner -> this is the host I'm chatting with
+      // - if I'm a host    -> this is the cleaner I'm chatting with
+      const otherParticipant =
+        (obj.participants as any[]).find(
+          (p) => String(p._id) !== String(userId),
+        ) || null;
+
+      return { ...obj, otherParticipant, unreadCount };
     }),
   );
 

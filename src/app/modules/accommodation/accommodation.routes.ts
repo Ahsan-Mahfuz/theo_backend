@@ -27,6 +27,20 @@ router.get(
   AccommodationController.getMyAccommodations,
 );
 
+// GET /api/v1/accommodation/dashboard — Host: today / upcoming / to-do buckets
+router.get(
+  "/dashboard",
+  auth("admin", "host"),
+  AccommodationController.getHostDashboard,
+);
+
+// GET /api/v1/accommodation/cleaner/:id — Single (cleaner: an accommodation requested by the host)
+router.get(
+  "/cleaner/:id",
+  auth("cleaner"),
+  AccommodationController.getAccommodationForCleaner,
+);
+
 // GET /api/v1/accommodation/:id — Single
 router.get(
   "/:id",

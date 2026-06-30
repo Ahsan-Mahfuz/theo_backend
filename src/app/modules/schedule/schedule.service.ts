@@ -5,7 +5,80 @@ import { User } from "../user/user.model";
 import { AssignmentService } from "../assignment/assignment.service";
 import { NotificationService } from "../notification/notification.service";
 import { PaymentService } from "../payment/payment.service";
+import { Payment } from "../payment/payment.model";
 import AppError from "../../error/appError";
+
+// Estimated duration (in hours) between checkInTime and checkOutTime ("HH:mm")
+const estimationHours = (checkInTime: string, checkOutTime: string): number => {
+  const [h1, m1] = checkInTime.split(":").map(Number);
+  const [h2, m2] = checkOutTime.split(":").map(Number);
+  let minutes = h2 * 60 + m2 - (h1 * 60 + m1);
+  if (minutes < 0) minutes += 24 * 60; // crosses midnight
+  return Math.round((minutes / 60) * 10) / 10;
+};
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+// "Wednesday 15 May" (matches the planning UI)
+const dayLabelOf = (date: Date): string =>
+  `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+
+// "2024-05-15" key for grouping / calendar dots
+const dayKeyOf = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+// Always expose the host's profileImage + phone (null when not set yet).
+// Mongoose drops unset fields after populate, so we backfill them here.
+const normalizeHost = (host: any) => {
+  if (!host || typeof host !== "object") return host;
+  return {
+    _id: host._id ?? null,
+    firstName: host.firstName ?? null,
+    lastName: host.lastName ?? null,
+    name: host.name ?? null,
+    profileImage: host.profileImage ?? null,
+    phone: host.phone ?? null,
+  };
+};
+
+// Shape a schedule into a cleaner-facing mission card (Home / Planning screens)
+const toMissionCard = (s: any) => {
+  const obj = s.toObject ? s.toObject() : s;
+  return {
+    ...obj,
+    host: normalizeHost(obj.host),
+    dayKey: dayKeyOf(new Date(obj.date)),
+    dayLabel: dayLabelOf(new Date(obj.date)),
+    estimationHours: estimationHours(obj.checkInTime, obj.checkOutTime),
+    cleanerResponse: cleanerResponseOf(obj.status),
+  };
+};
 
 // Derive the cleaner's response to a schedule (what the host wants to see):
 //   pending  → sent, cleaner hasn't responded yet
@@ -335,7 +408,143 @@ const getCleanerSchedules = async (
     CleaningSchedule.countDocuments(filter),
   ]);
 
-  return { data, meta: { page, limit, total, totalPage: Math.ceil(total / limit) } };
+  const rows = data.map((s) => toMissionCard(s));
+
+  return {
+    data: rows,
+    meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
+  };
+};
+
+// ─── Cleaner: Home (dashboard — today's cleaning + upcoming) ───────────────────
+const ACCOMMODATION_CARD_FIELDS =
+  "name address city photos accommodationType surface floor numberOfRooms";
+
+const getCleanerHome = async (cleanerId: string) => {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  // Active = anything the cleaner still has to act on / is working on
+  const activeStatuses = [
+    "scheduled",
+    "accepted",
+    "in_progress",
+    "proof_submitted",
+    "disputed",
+  ];
+
+  const [todayRows, upcomingRows, missionsToday, completedToday] =
+    await Promise.all([
+      // Today's cleaning (any status that happened today, completed included)
+      CleaningSchedule.find({
+        cleaner: cleanerId,
+        date: { $gte: startOfToday, $lte: endOfToday },
+        status: { $nin: ["refused", "cancelled"] },
+      })
+        .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
+        .populate("host", "firstName lastName name profileImage phone")
+        .sort({ checkInTime: 1 }),
+
+      // Upcoming tasks (future days, still active)
+      CleaningSchedule.find({
+        cleaner: cleanerId,
+        date: { $gt: endOfToday },
+        status: { $in: activeStatuses },
+      })
+        .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
+        .populate("host", "firstName lastName name profileImage phone")
+        .sort({ date: 1, checkInTime: 1 })
+        .limit(10),
+
+      CleaningSchedule.countDocuments({
+        cleaner: cleanerId,
+        date: { $gte: startOfToday, $lte: endOfToday },
+        status: { $in: activeStatuses },
+      }),
+
+      CleaningSchedule.countDocuments({
+        cleaner: cleanerId,
+        date: { $gte: startOfToday, $lte: endOfToday },
+        status: "completed",
+      }),
+    ]);
+
+  return {
+    summary: {
+      date: dayKeyOf(startOfToday),
+      missionsToday,
+      completedToday,
+    },
+    todaysCleaning: todayRows.map((s) => toMissionCard(s)),
+    upcomingTasks: upcomingRows.map((s) => toMissionCard(s)),
+  };
+};
+
+// ─── Cleaner: Planning (calendar view — missions grouped by date) ──────────────
+const getCleanerPlanning = async (
+  cleanerId: string,
+  query: Record<string, unknown>,
+) => {
+  // Range: explicit ?from&to, else a whole month (?month=YYYY-MM), else current month
+  let from: Date;
+  let to: Date;
+
+  if (query.from && query.to) {
+    from = new Date(String(query.from));
+    from.setHours(0, 0, 0, 0);
+    to = new Date(String(query.to));
+    to.setHours(23, 59, 59, 999);
+  } else {
+    const base = query.month
+      ? new Date(`${String(query.month)}-01T00:00:00`)
+      : new Date();
+    from = new Date(base.getFullYear(), base.getMonth(), 1, 0, 0, 0, 0);
+    to = new Date(base.getFullYear(), base.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  const filter: any = {
+    cleaner: cleanerId,
+    date: { $gte: from, $lte: to },
+    status: { $nin: ["cancelled"] },
+  };
+  if (query.status) filter.status = query.status;
+
+  const schedules = await CleaningSchedule.find(filter)
+    .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
+    .populate("host", "firstName lastName name profileImage phone")
+    .sort({ date: 1, checkInTime: 1 });
+
+  const missions = schedules.map((s) => toMissionCard(s));
+
+  // Group missions by day for the schedule list
+  const groupMap = new Map<string, any>();
+  // Per-day counts for the calendar strip dots/badges
+  const dayCounts = new Map<string, number>();
+
+  for (const mission of missions) {
+    const key = mission.dayKey;
+    dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        date: key,
+        label: mission.dayLabel,
+        count: 0,
+        missions: [],
+      });
+    }
+    const group = groupMap.get(key);
+    group.count += 1;
+    group.missions.push(mission);
+  }
+
+  return {
+    range: { from: dayKeyOf(from), to: dayKeyOf(to) },
+    days: Array.from(dayCounts, ([date, count]) => ({ date, count })),
+    groups: Array.from(groupMap.values()),
+  };
 };
 
 // ─── Single schedule (host or its cleaner) ────────────────────────────────────
@@ -353,9 +562,26 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
     String(cleaner?._id || cleaner) === userId;
   if (!isParty) throw new AppError(403, "You are not part of this schedule");
 
+  // latest payment for this schedule
+  const latestPayment = await Payment.findOne({ schedule: schedule._id })
+    .sort({ createdAt: -1 })
+    .select("status amount currency createdAt");
+
   return {
     ...schedule.toObject(),
     cleanerResponse: cleanerResponseOf(schedule.status),
+    scheduleId: String(schedule._id),
+    scheduleStatus: schedule.status,
+    scheduleCleanerResponse: cleanerResponseOf(schedule.status),
+    paymentStatus: latestPayment?.status ?? null,
+    latestPayment: latestPayment
+      ? {
+          status: latestPayment.status,
+          amount: latestPayment.amount,
+          currency: latestPayment.currency,
+          createdAt: latestPayment.createdAt,
+        }
+      : null,
   };
 };
 
@@ -483,6 +709,8 @@ export const ScheduleService = {
   respondToSchedule,
   getHostSchedules,
   getCleanerSchedules,
+  getCleanerHome,
+  getCleanerPlanning,
   getScheduleById,
   submitProof,
   reportDispute,

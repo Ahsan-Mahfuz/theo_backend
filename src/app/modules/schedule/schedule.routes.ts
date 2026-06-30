@@ -44,6 +44,20 @@ router.delete("/:id", auth("admin", "host"), ScheduleController.deleteSchedule);
 
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 
+// GET /api/v1/schedule/cleaner/home — cleaner dashboard (today's cleaning + upcoming)
+router.get(
+  "/cleaner/home",
+  auth("cleaner"),
+  ScheduleController.getCleanerHome,
+);
+
+// GET /api/v1/schedule/cleaner/planning — calendar view (?month=YYYY-MM | ?from&to | ?status)
+router.get(
+  "/cleaner/planning",
+  auth("cleaner"),
+  ScheduleController.getCleanerPlanning,
+);
+
 // GET /api/v1/schedule/cleaner — cleaner's schedules (?status&page&limit)
 router.get("/cleaner", auth("cleaner"), ScheduleController.getCleanerSchedules);
 

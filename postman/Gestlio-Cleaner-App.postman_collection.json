@@ -1,0 +1,247 @@
+{
+  "info": {
+    "name": "Gestlio – Cleaner App (Theo Backend)",
+    "description": "Cleaner-facing APIs for the mobile app:\n\n- Home (dashboard): today's cleaning + upcoming tasks + counters\n- Planning (calendar): missions grouped by date, per-day counts for the calendar strip\n- My Missions (get all) + Single Mission (get single)\n- Requests inbox + accept/refuse\n- Accommodation detail (requested by host)\n- Submit proof / Report dispute\n\nSet collection variables:\n- baseUrl (e.g. http://localhost:6050/api/v1)\n- cleanerToken (JWT of a cleaner)\n- accommodationId, assignmentId, scheduleId",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:6050/api/v1" },
+    { "key": "cleanerToken", "value": "" },
+    { "key": "accommodationId", "value": "" },
+    { "key": "assignmentId", "value": "" },
+    { "key": "scheduleId", "value": "" },
+    { "key": "month", "value": "2024-05" }
+  ],
+  "item": [
+    {
+      "name": "Home",
+      "item": [
+        {
+          "name": "Get my profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Cleaner profile. Includes isOnboardingComplete (true/false) for cleaners."
+          }
+        },
+        {
+          "name": "Cleaner: Home (today's cleaning + upcoming)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/schedule/cleaner/home",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "cleaner", "home"]
+            },
+            "description": "Dashboard for the Home screen.\n\nReturns:\n- summary: { date, missionsToday, completedToday }\n- todaysCleaning: [ mission cards dated today ]\n- upcomingTasks: [ next 10 active future missions ]\n\nEach mission card adds: dayKey, dayLabel, estimationHours, cleanerResponse."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Planning (calendar)",
+      "item": [
+        {
+          "name": "Cleaner: Planning by month",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/schedule/cleaner/planning?month={{month}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "cleaner", "planning"],
+              "query": [{ "key": "month", "value": "{{month}}", "description": "YYYY-MM (defaults to current month)" }]
+            },
+            "description": "Calendar view for the Planning screen (matches the date-strip + grouped list design).\n\nReturns:\n- range: { from, to }\n- days: [ { date, count } ]  -> use for the calendar strip badges/dots\n- groups: [ { date, label: 'Wednesday 15 May', count, missions: [...] } ]"
+          }
+        },
+        {
+          "name": "Cleaner: Planning by date range",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/schedule/cleaner/planning?from=2024-05-13&to=2024-05-17&status=",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "cleaner", "planning"],
+              "query": [
+                { "key": "from", "value": "2024-05-13", "description": "YYYY-MM-DD" },
+                { "key": "to", "value": "2024-05-17", "description": "YYYY-MM-DD" },
+                { "key": "status", "value": "", "description": "optional: scheduled|accepted|in_progress|proof_submitted|completed|disputed" }
+              ]
+            },
+            "description": "Same as planning, but for an explicit from/to range (e.g. the visible week)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Missions",
+      "item": [
+        {
+          "name": "Cleaner: My Missions (get all)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/schedule/cleaner?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "cleaner"],
+              "query": [
+                { "key": "status", "value": "", "description": "optional: scheduled|accepted|in_progress|proof_submitted|completed|refused|disputed" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "description": "Paginated list of the cleaner's missions. Each item includes dayKey, dayLabel, estimationHours, cleanerResponse."
+          }
+        },
+        {
+          "name": "Cleaner: Single Mission (get single)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/schedule/{{scheduleId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "{{scheduleId}}"]
+            },
+            "description": "Full detail of one mission (accommodation + host + cleaner populated). Cleaner must be part of the schedule."
+          }
+        },
+        {
+          "name": "Cleaner: accept / refuse a schedule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cleanerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"accept\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/schedule/{{scheduleId}}/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "{{scheduleId}}", "respond"]
+            },
+            "description": "action: 'accept' | 'refuse'. Only allowed while status is 'scheduled'."
+          }
+        },
+        {
+          "name": "Cleaner: submit proof (photos + notes)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "proofNotes", "value": "Cleaning completed, all rooms done.", "type": "text", "description": "optional" },
+                { "key": "photos", "type": "file", "src": [], "description": "up to 10 photos" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/schedule/{{scheduleId}}/submit-proof",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "{{scheduleId}}", "submit-proof"]
+            }
+          }
+        },
+        {
+          "name": "Cleaner: report a dispute",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "reason", "value": "Access problem", "type": "text", "description": "optional" },
+                { "key": "notes", "value": "The access code did not work.", "type": "text", "description": "optional" },
+                { "key": "photos", "type": "file", "src": [], "description": "up to 10 photos" }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/schedule/{{scheduleId}}/dispute",
+              "host": ["{{baseUrl}}"],
+              "path": ["schedule", "{{scheduleId}}", "dispute"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Requests (inbox)",
+      "item": [
+        {
+          "name": "Cleaner: my requests (inbox)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/assignment/my-requests?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignment", "my-requests"],
+              "query": [
+                { "key": "status", "value": "", "description": "optional: pending|accepted|refused" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cleaner: accept / refuse a request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cleanerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"accept\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/assignment/{{assignmentId}}/respond",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignment", "{{assignmentId}}", "respond"]
+            },
+            "description": "action: 'accept' | 'refuse'. (Endpoint path may differ — adjust to your assignment routes if needed.)"
+          }
+        },
+        {
+          "name": "Cleaner: my accepted accommodations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/assignment/my-accommodations?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["assignment", "my-accommodations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cleaner: Get Accommodation By ID (requested by host)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{cleanerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/accommodation/cleaner/{{accommodationId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["accommodation", "cleaner", "{{accommodationId}}"]
+            },
+            "description": "Single accommodation detail for the cleaner. Only works if the host has a request/assignment for this cleaner on that accommodation.\n\nAdds: myAssignment, paymentStatus, latestPayment, scheduleId, scheduleStatus, scheduleCleanerResponse (scoped to this cleaner)."
+          }
+        }
+      ]
+    }
+  ]
+}

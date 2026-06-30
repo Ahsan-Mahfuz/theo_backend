@@ -109,6 +109,31 @@ const getCleanerSchedules = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getCleanerHome = catchAsync(async (req: Request, res: Response) => {
+  const cleanerId = (req as any).user.userId;
+  const result = await ScheduleService.getCleanerHome(cleanerId);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Home retrieved successfully",
+    data: result,
+  });
+});
+
+const getCleanerPlanning = catchAsync(async (req: Request, res: Response) => {
+  const cleanerId = (req as any).user.userId;
+  const result = await ScheduleService.getCleanerPlanning(
+    cleanerId,
+    req.query as any,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Planning retrieved successfully",
+    data: result,
+  });
+});
+
 const submitProof = catchAsync(async (req: Request, res: Response) => {
   const cleanerId = (req as any).user.userId;
   const result = await ScheduleService.submitProof(cleanerId, req.params.id, {
@@ -159,6 +184,8 @@ export const ScheduleController = {
   completeTask,
   respondToSchedule,
   getCleanerSchedules,
+  getCleanerHome,
+  getCleanerPlanning,
   submitProof,
   reportDispute,
   getScheduleById,
