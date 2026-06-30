@@ -6,6 +6,7 @@ import { User } from "../user/user.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
 import { Payment } from "../payment/payment.model";
 import { CleaningSchedule } from "../schedule/schedule.model";
+import { Booking } from "../calendar/calendar.model";
 
 // Derive the cleaner's response to the latest schedule (what the host sees):
 //   pending  → schedule sent, cleaner hasn't responded yet
@@ -173,94 +174,231 @@ const getMyAccommodations = async (
   };
 };
 
-// ─── Host dashboard: today / upcoming / to-do ─────────────────────────────────
-//   today    → payment complete AND the cleaning is scheduled for today
-//   upcoming → payment complete AND the cleaning is scheduled for a future day
-//   toDo     → everything else (no paid+dated schedule yet)
-// An accommodation appears in only one bucket (priority: today > upcoming > toDo).
-const PAID_STATUSES = ["paid_held", "released"];
+// ─── Host dashboard: recommended_schedule (iCal turnovers) + to_do (activity) ──
+const RECOMMENDATION_LIMIT = 3;
+const CLEANER_CARD_FIELDS = "firstName lastName name profileImage";
+const ACC_CARD_FIELDS = "name address city photos accommodationType";
 
-const getHostDashboard = async (hostId: string) => {
-  // start & end of "today" in server time
-  const now = new Date();
-  const todayStart = new Date(now);
+// "HH:mm" (server local time) from a Date
+const hhmm = (d: Date): string =>
+  `${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes(),
+  ).padStart(2, "0")}`;
+
+// "YYYY-MM-DD" day key (server local time)
+const dayKey = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+// Host-facing label for a cleaning schedule's current status
+const scheduleEventLabel = (status: string): string => {
+  switch (status) {
+    case "scheduled": return "Schedule sent to cleaner";
+    case "accepted": return "Cleaner accepted the schedule";
+    case "refused": return "Refused the mission";
+    case "in_progress": return "Cleaning in progress";
+    case "proof_submitted": return "Proof submitted";
+    case "completed": return "Cleaning completed";
+    case "disputed": return "Dispute reported";
+    case "cancelled": return "Schedule cancelled";
+    default: return status;
+  }
+};
+
+// The timestamp that best represents *when* a schedule reached its current status
+const scheduleEventTime = (s: any): Date => {
+  switch (s.status) {
+    case "scheduled": return s.createdAt;
+    case "proof_submitted": return s.proofSubmittedAt || s.updatedAt;
+    case "completed": return s.completedAt || s.updatedAt;
+    case "disputed": return s.dispute?.raisedAt || s.updatedAt;
+    default: return s.updatedAt;
+  }
+};
+
+// Host-facing label for an assignment request's status
+const assignmentEventLabel = (status: string): string => {
+  switch (status) {
+    case "pending": return "Request sent to cleaner";
+    case "accepted": return "Cleaner accepted your request";
+    case "refused": return "Cleaner refused your request";
+    default: return status;
+  }
+};
+
+const getHostDashboard = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => {
+  const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
+
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 20;
+  const skip = (page - 1) * limit;
 
   const accommodations = await Accommodation.find({
     host: hostId,
     isDeleted: false,
-  })
-    .sort({ createdAt: -1 })
-    .populate("host", "firstName lastName profileImage");
-
+  });
   const accIds = accommodations.map((a) => a._id);
+  const accById = new Map(accommodations.map((a) => [String(a._id), a]));
 
-  // All paid schedules for this host's accommodations
-  const paidSchedules = await CleaningSchedule.find({
+  // ── recommended_schedule ───────────────────────────────────────────────────
+  // Only accommodations with an ACCEPTED PRIMARY cleaner qualify (we show that
+  // cleaner on the card). For each, find iCal "turnovers": the free window
+  // between one guest's checkout and the next guest's check-in.
+  const primaryAssignments = await CleanerAssignment.find({
     host: hostId,
     accommodation: { $in: accIds },
-    paymentStatus: { $in: PAID_STATUSES },
-    status: { $nin: ["cancelled", "refused"] },
-  })
-    .populate("cleaner", "firstName lastName name profileImage")
-    .sort({ date: 1 });
+    role: "primary",
+    status: "accepted",
+  }).populate("cleaner", CLEANER_CARD_FIELDS);
 
-  // For each accommodation, keep the most relevant paid schedule:
-  //   prefer a today/upcoming one (earliest future-or-today date)
-  const todaySchedule = new Map<string, any>();
-  const upcomingSchedule = new Map<string, any>();
+  const cleanerByAcc = new Map<string, any>();
+  for (const a of primaryAssignments) {
+    cleanerByAcc.set(String(a.accommodation), a.cleaner);
+  }
+  const eligibleAccIds = [...cleanerByAcc.keys()];
 
-  for (const s of paidSchedules) {
-    const key = String(s.accommodation);
-    const date = new Date(s.date);
+  // future (non-cancelled) bookings for eligible accommodations
+  const bookings = eligibleAccIds.length
+    ? await Booking.find({
+        accommodation: { $in: eligibleAccIds },
+        isCancelled: false,
+        endDate: { $gte: todayStart },
+      }).sort({ accommodation: 1, startDate: 1 })
+    : [];
 
-    if (date >= todayStart && date <= todayEnd) {
-      if (!todaySchedule.has(key)) todaySchedule.set(key, s);
-    } else if (date > todayEnd) {
-      if (!upcomingSchedule.has(key)) upcomingSchedule.set(key, s);
+  const bookingsByAcc = new Map<string, any[]>();
+  for (const b of bookings) {
+    const key = String(b.accommodation);
+    if (!bookingsByAcc.has(key)) bookingsByAcc.set(key, []);
+    bookingsByAcc.get(key)!.push(b);
+  }
+
+  // existing cleanings so we don't recommend a turnover that's already handled
+  const existing = eligibleAccIds.length
+    ? await CleaningSchedule.find({
+        host: hostId,
+        accommodation: { $in: eligibleAccIds },
+        status: { $nin: ["refused", "cancelled"] },
+        date: { $gte: todayStart },
+      }).select("accommodation date booking")
+    : [];
+
+  const scheduledDays = new Map<string, Set<string>>(); // accId -> {dayKey}
+  const scheduledBookings = new Set<string>();
+  for (const s of existing) {
+    const accKey = String(s.accommodation);
+    if (!scheduledDays.has(accKey)) scheduledDays.set(accKey, new Set());
+    scheduledDays.get(accKey)!.add(dayKey(new Date(s.date)));
+    if (s.booking) scheduledBookings.add(String(s.booking));
+  }
+
+  const recommendations: any[] = [];
+  for (const [accKey, list] of bookingsByAcc) {
+    const accDoc: any = accById.get(accKey);
+    if (!accDoc) continue;
+
+    for (let i = 0; i < list.length; i++) {
+      const current = list[i];
+      const next = list[i + 1]; // the booking that bounds the free window (if any)
+      const checkout = new Date(current.endDate);
+      if (checkout < todayStart) continue;
+
+      const freeUntil = next ? new Date(next.startDate) : null;
+      // a real free window must exist (next guest arrives after checkout)
+      if (freeUntil && freeUntil <= checkout) continue;
+
+      // skip if this booking or the checkout day already has a cleaning
+      if (scheduledBookings.has(String(current._id))) continue;
+      if (scheduledDays.get(accKey)?.has(dayKey(checkout))) continue;
+
+      recommendations.push({
+        accommodation: {
+          _id: accDoc._id,
+          name: accDoc.name,
+          address: accDoc.address,
+          city: accDoc.city,
+          photos: accDoc.photos,
+          accommodationType: accDoc.accommodationType,
+        },
+        cleaner: cleanerByAcc.get(accKey) ?? null,
+        recommendedDate: checkout,
+        freeFrom: checkout,
+        freeUntil,
+        checkInTime: hhmm(checkout),
+        checkOutTime: freeUntil ? hhmm(freeUntil) : null,
+        booking: {
+          _id: current._id,
+          summary: current.summary,
+          platform: current.platform,
+          startDate: current.startDate,
+          endDate: current.endDate,
+        },
+      });
     }
   }
 
-  const shape = (a: any, schedule: any) => ({
-    ...a.toObject(),
-    schedule: schedule
-      ? {
-          scheduleId: String(schedule._id),
-          date: schedule.date,
-          checkInTime: schedule.checkInTime,
-          checkOutTime: schedule.checkOutTime,
-          status: schedule.status,
-          paymentStatus: schedule.paymentStatus,
-          cleaner: schedule.cleaner,
-        }
-      : null,
-  });
+  recommendations.sort(
+    (a, b) =>
+      new Date(a.recommendedDate).getTime() -
+      new Date(b.recommendedDate).getTime(),
+  );
+  const recommended_schedule = recommendations.slice(0, RECOMMENDATION_LIMIT);
 
-  const today: any[] = [];
-  const upcoming: any[] = [];
-  const toDo: any[] = [];
+  // ── to_do: unified activity feed (newest first, paginated) ──────────────────
+  // Every host-facing interaction on their accommodations: assignment responses
+  // and cleaning-schedule status changes (accepted/refused/completed/dispute…).
+  const [schedules, assignments] = await Promise.all([
+    CleaningSchedule.find({ host: hostId, accommodation: { $in: accIds } })
+      .populate("cleaner", CLEANER_CARD_FIELDS)
+      .populate("accommodation", ACC_CARD_FIELDS),
+    CleanerAssignment.find({ host: hostId, accommodation: { $in: accIds } })
+      .populate("cleaner", CLEANER_CARD_FIELDS)
+      .populate("accommodation", ACC_CARD_FIELDS),
+  ]);
 
-  for (const a of accommodations) {
-    const key = String(a._id);
-    if (todaySchedule.has(key)) {
-      today.push(shape(a, todaySchedule.get(key)));
-    } else if (upcomingSchedule.has(key)) {
-      upcoming.push(shape(a, upcomingSchedule.get(key)));
-    } else {
-      toDo.push(shape(a, null));
-    }
+  const events: any[] = [];
+  for (const s of schedules) {
+    events.push({
+      kind: "schedule",
+      scheduleId: String(s._id),
+      status: s.status,
+      label: scheduleEventLabel(s.status),
+      timestamp: scheduleEventTime(s),
+      accommodation: s.accommodation,
+      cleaner: s.cleaner,
+    });
   }
+  for (const a of assignments) {
+    events.push({
+      kind: "assignment",
+      assignmentId: String(a._id),
+      status: a.status,
+      label: assignmentEventLabel(a.status),
+      timestamp: a.respondedAt || a.createdAt,
+      accommodation: a.accommodation,
+      cleaner: a.cleaner,
+    });
+  }
+
+  events.sort(
+    (x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime(),
+  );
+
+  const total = events.length;
+  const data = events.slice(skip, skip + limit);
 
   return {
-    today,
-    upcoming,
-    toDo,
-    counts: {
-      today: today.length,
-      upcoming: upcoming.length,
-      toDo: toDo.length,
+    recommended_schedule,
+    to_do: {
+      data,
+      meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
     },
   };
 };

@@ -47,7 +47,10 @@ const getMyAccommodations = catchAsync(async (req: Request, res: Response) => {
 
 const getHostDashboard = catchAsync(async (req: Request, res: Response) => {
   const hostId = (req as any).user.userId;
-  const result = await AccommodationService.getHostDashboard(hostId);
+  const result = await AccommodationService.getHostDashboard(
+    hostId,
+    req.query as any,
+  );
   sendResponse(res, {
     statusCode: 200,
     success: true,

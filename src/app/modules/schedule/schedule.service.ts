@@ -420,6 +420,10 @@ const getCleanerSchedules = async (
 const ACCOMMODATION_CARD_FIELDS =
   "name address city photos accommodationType surface floor numberOfRooms";
 
+// Payment is "paid" once the host has funded the escrow (paid_held) and stays
+// paid after the payout is released to the cleaner (released).
+const PAID_STATUSES = ["paid_held", "released"];
+
 const getCleanerHome = async (cleanerId: string) => {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -437,37 +441,42 @@ const getCleanerHome = async (cleanerId: string) => {
 
   const [todayRows, upcomingRows, missionsToday, completedToday] =
     await Promise.all([
-      // Today's cleaning (any status that happened today, completed included)
+      // Today's cleaning — only after the host has paid (paid_held/released)
       CleaningSchedule.find({
         cleaner: cleanerId,
         date: { $gte: startOfToday, $lte: endOfToday },
         status: { $nin: ["refused", "cancelled"] },
+        paymentStatus: { $in: PAID_STATUSES },
       })
         .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
         .populate("host", "firstName lastName name profileImage phone")
         .sort({ checkInTime: 1 }),
 
-      // Upcoming tasks (future days, still active)
+      // Upcoming tasks (future days, still active) — paid only
       CleaningSchedule.find({
         cleaner: cleanerId,
         date: { $gt: endOfToday },
         status: { $in: activeStatuses },
+        paymentStatus: { $in: PAID_STATUSES },
       })
         .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
         .populate("host", "firstName lastName name profileImage phone")
         .sort({ date: 1, checkInTime: 1 })
         .limit(10),
 
+      // Missions still to do today — paid + active
       CleaningSchedule.countDocuments({
         cleaner: cleanerId,
         date: { $gte: startOfToday, $lte: endOfToday },
         status: { $in: activeStatuses },
+        paymentStatus: { $in: PAID_STATUSES },
       }),
 
+      // Completed today = the cleaner has actually been paid out (released)
       CleaningSchedule.countDocuments({
         cleaner: cleanerId,
         date: { $gte: startOfToday, $lte: endOfToday },
-        status: "completed",
+        paymentStatus: "released",
       }),
     ]);
 

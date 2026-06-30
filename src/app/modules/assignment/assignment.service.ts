@@ -227,15 +227,52 @@ const getMyRequests = async (
   const [data, total] = await Promise.all([
     CleanerAssignment.find(filter)
       .populate("accommodation", "name address city photos cleaningRate")
-      .populate("host", "firstName lastName name profileImage")
+      .populate("host", "firstName lastName name profileImage createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
     CleanerAssignment.countDocuments(filter),
   ]);
 
+  // total (non-deleted) properties per host shown on this page
+  const hostIds = [
+    ...new Set(
+      data
+        .map((a) => (a.host as any)?._id)
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+
+  const propertyCounts = await Accommodation.aggregate([
+    {
+      $match: {
+        host: { $in: hostIds.map((id) => new Types.ObjectId(id)) },
+        isDeleted: false,
+      },
+    },
+    { $group: { _id: "$host", count: { $sum: 1 } } },
+  ]);
+
+  const countByHost = new Map<string, number>(
+    propertyCounts.map((p: any) => [String(p._id), p.count]),
+  );
+
+  const rows = data.map((a) => {
+    const obj = a.toObject();
+    const host = obj.host as any;
+    if (host && typeof host === "object") {
+      obj.host = {
+        ...host,
+        totalProperties: countByHost.get(String(host._id)) ?? 0,
+        memberSince: host.createdAt ?? null,
+      };
+    }
+    return obj;
+  });
+
   return {
-    data,
+    data: rows,
     meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
   };
 };
