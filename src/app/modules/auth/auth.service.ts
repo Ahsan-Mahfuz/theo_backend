@@ -27,6 +27,49 @@ const signToken = (payload: ITokenPayload): string => {
   });
 };
 
+// All profile fields returned to the client. Any field missing on the document
+// is filled with `null` so host & cleaner responses always have the same shape.
+const PROFILE_FIELDS: string[] = [
+  "firstName",
+  "lastName",
+  "name",
+  "email",
+  "role",
+  "authProvider",
+  "phone",
+  "profileImage",
+  // host address
+  "address",
+  "city",
+  "zipCode",
+  "country",
+  // cleaner profile
+  "about",
+  "biography",
+  "interventionZone",
+  "languages",
+  "servicesOffered",
+  "cleaningsCompleted",
+  // cleaner onboarding / professional status
+  "siretNumber",
+  "isProfessionalVerified",
+  "workCity",
+  "serviceRadius",
+  "licenseNumber",
+  "availability",
+  "kycLevel",
+  // push / stripe
+  "playerId",
+  "stripeAccountId",
+  "stripeCustomerId",
+  "stripeOnboardingComplete",
+  "payoutsEnabled",
+  // status
+  "isActive",
+  "isVerified",
+  "isDeleted",
+];
+
 const sanitize = (user: any) => {
   const obj = user.toObject ? user.toObject() : { ...user };
   delete obj.password;
@@ -34,6 +77,12 @@ const sanitize = (user: any) => {
   delete obj.otpExpiry;
   delete obj.passwordResetToken;
   delete obj.passwordResetExpiry;
+
+  // Ensure every profile field is present (null when unset) for a consistent
+  // response shape across host & cleaner.
+  for (const field of PROFILE_FIELDS) {
+    if (obj[field] === undefined) obj[field] = null;
+  }
 
   // Cleaner-only: has the cleaner finished the onboarding (setup profile) screens?
   // Required fields collected during onboarding (biography & photo are optional).
@@ -281,6 +330,10 @@ const updateMyProfile = async (userId: string, payload: IUpdateProfile) => {
   if (payload.phone !== undefined) updateData.phone = payload.phone;
   if (payload.profileImage !== undefined)
     updateData.profileImage = payload.profileImage;
+  if (payload.address !== undefined) updateData.address = payload.address;
+  if (payload.city !== undefined) updateData.city = payload.city;
+  if (payload.zipCode !== undefined) updateData.zipCode = payload.zipCode;
+  if (payload.country !== undefined) updateData.country = payload.country;
   if (payload.about !== undefined) updateData.about = payload.about;
   if (payload.biography !== undefined) updateData.biography = payload.biography;
   if (payload.interventionZone !== undefined)

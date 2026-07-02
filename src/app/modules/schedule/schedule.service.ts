@@ -123,6 +123,7 @@ const createSchedule = async (
   hostId: string,
   accommodationId: string,
   payload: {
+    cleanerId: string;
     date: string;
     checkInTime: string;
     checkOutTime: string;
@@ -137,12 +138,17 @@ const createSchedule = async (
   });
   if (!accommodation) throw new AppError(404, "Accommodation not found");
 
-  // BACKEND RESTRICTION: cannot schedule without an accepted primary cleaner
-  const primary = await AssignmentService.getAcceptedPrimary(accommodationId);
-  if (!primary) {
+  // The host picks WHICH assigned cleaner to schedule. That cleaner must already
+  // be a primary/substitute on this accommodation AND have accepted the request,
+  // so the schedule only lands in that one cleaner's inbox.
+  const assignment = await AssignmentService.getAcceptedAssignment(
+    accommodationId,
+    payload.cleanerId,
+  );
+  if (!assignment) {
     throw new AppError(
       400,
-      "You must assign a cleaner (who has accepted) before scheduling.",
+      "This cleaner is not an accepted primary/substitute for this accommodation. Assign them first (and have them accept) before scheduling.",
     );
   }
 
@@ -161,8 +167,8 @@ const createSchedule = async (
   const schedule = await CleaningSchedule.create({
     accommodation: accommodationId,
     host: hostId,
-    cleaner: primary.cleaner,
-    assignment: primary._id,
+    cleaner: assignment.cleaner,
+    assignment: assignment._id,
     booking: payload.bookingId,
     date: new Date(payload.date),
     checkInTime: payload.checkInTime,
@@ -175,7 +181,7 @@ const createSchedule = async (
   await accommodation.save();
 
   await NotificationService.createNotification({
-    user: String(primary.cleaner),
+    user: String(assignment.cleaner),
     title: "New cleaning scheduled",
     message: `${accommodation.name} is scheduled for ${new Date(payload.date).toDateString()} (${payload.checkInTime}–${payload.checkOutTime}).`,
     type: "schedule_created",
@@ -190,6 +196,7 @@ const updateSchedule = async (
   hostId: string,
   scheduleId: string,
   payload: {
+    cleanerId?: string;
     date?: string;
     checkInTime?: string;
     checkOutTime?: string;
@@ -210,6 +217,37 @@ const updateSchedule = async (
         ? "This schedule was refused. Please create a new one."
         : "The cleaner has already accepted this schedule, so it can no longer be edited.",
     );
+  }
+
+  // Re-assign to a different cleaner. The new cleaner must also be an accepted
+  // primary/substitute on this accommodation. We notify the previous cleaner
+  // that the pending request no longer applies to them.
+  const previousCleanerId = String(schedule.cleaner);
+  if (payload.cleanerId && payload.cleanerId !== previousCleanerId) {
+    const accommodationId = String(
+      (schedule.accommodation as any)?._id || schedule.accommodation,
+    );
+    const assignment = await AssignmentService.getAcceptedAssignment(
+      accommodationId,
+      payload.cleanerId,
+    );
+    if (!assignment) {
+      throw new AppError(
+        400,
+        "This cleaner is not an accepted primary/substitute for this accommodation.",
+      );
+    }
+    schedule.cleaner = assignment.cleaner as any;
+    schedule.assignment = assignment._id as any;
+
+    const accName = (schedule.accommodation as any)?.name || "an accommodation";
+    await NotificationService.createNotification({
+      user: previousCleanerId,
+      title: "Cleaning schedule reassigned",
+      message: `The host reassigned the cleaning for ${accName} to another cleaner.`,
+      type: "schedule_created",
+      data: { scheduleId: String(schedule._id) },
+    });
   }
 
   // If the date changes to a *different* day, make sure it doesn't clash with

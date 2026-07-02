@@ -16,6 +16,11 @@ export interface IUser extends Document {
   phone?: string;
   profileImage?: string;
 
+  // ─── Host address ───────────────────────────────────────────────────────────
+  address?: string;
+  city?: string;
+  zipCode?: string;
+
   // ─── Cleaner (housekeeper) profile ──────────────────────────────────────────
   about?: string;
   biography?: string; // "Tell us a little bit about yourself" (setup profile)

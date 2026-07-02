@@ -80,6 +80,11 @@ export const updateProfileSchema = z.object({
   firstName: z.string().min(2).optional(),
   lastName: z.string().min(2).optional(),
   phone: z.string().min(7).optional(),
+  // host address fields
+  address: z.string().optional(),
+  city: z.string().optional(),
+  zipCode: z.string().optional(),
+  country: z.string().optional(),
   // cleaner profile fields
   about: z.string().optional(),
   biography: z.string().optional(),

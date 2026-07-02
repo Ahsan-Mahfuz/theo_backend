@@ -21,6 +21,11 @@ const userSchema = new Schema<IUser>(
     phone: { type: String },
     profileImage: { type: String },
 
+    // ─── Host address ─────────────────────────────────────────────────────────
+    address: { type: String, trim: true },
+    city: { type: String, trim: true },
+    zipCode: { type: String, trim: true },
+
     // ─── Cleaner (housekeeper) profile ────────────────────────────────────────
     about: { type: String },
     biography: { type: String },

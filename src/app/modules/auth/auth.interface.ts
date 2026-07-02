@@ -56,6 +56,11 @@ export interface IUpdateProfile {
   lastName?: string;
   phone?: string;
   profileImage?: string;
+  // host address
+  address?: string;
+  city?: string;
+  zipCode?: string;
+  country?: string;
   about?: string;
   biography?: string;
   interventionZone?: string;

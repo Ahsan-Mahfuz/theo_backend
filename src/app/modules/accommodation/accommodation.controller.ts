@@ -43,6 +43,42 @@ const getMyAccommodations = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ─── Housing: created + cleaner-assignment stage ──────────────────────────────
+
+const getHousingAccommodations = catchAsync(
+  async (req: Request, res: Response) => {
+    const hostId = (req as any).user.userId;
+    const result = await AccommodationService.getHousingAccommodations(
+      hostId,
+      req.query as any,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Housing accommodations retrieved successfully",
+      data: result,
+    });
+  },
+);
+
+// ─── Planning: schedule + payment stage → completion ──────────────────────────
+
+const getPlanningAccommodations = catchAsync(
+  async (req: Request, res: Response) => {
+    const hostId = (req as any).user.userId;
+    const result = await AccommodationService.getPlanningAccommodations(
+      hostId,
+      req.query as any,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Planning accommodations retrieved successfully",
+      data: result,
+    });
+  },
+);
+
 // ─── Host dashboard: today / upcoming / to-do ─────────────────────────────────
 
 const getHostDashboard = catchAsync(async (req: Request, res: Response) => {
@@ -141,6 +177,8 @@ const deleteAccommodation = catchAsync(async (req: Request, res: Response) => {
 export const AccommodationController = {
   createAccommodation,
   getMyAccommodations,
+  getHousingAccommodations,
+  getPlanningAccommodations,
   getHostDashboard,
   getAccommodationById,
   getAccommodationForCleaner,

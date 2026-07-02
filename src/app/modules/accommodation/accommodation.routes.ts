@@ -34,6 +34,21 @@ router.get(
   AccommodationController.getHostDashboard,
 );
 
+// GET /api/v1/accommodation/housing — Created + cleaner-assignment stage (not scheduled)
+// Query: ?isCleanerAssigned=true|false&accommodationType=&city=&search=&page=&limit=
+router.get(
+  "/housing",
+  auth("admin", "host"),
+  AccommodationController.getHousingAccommodations,
+);
+
+// GET /api/v1/accommodation/planning — Schedule + payment stage → completion (scheduled)
+router.get(
+  "/planning",
+  auth("admin", "host"),
+  AccommodationController.getPlanningAccommodations,
+);
+
 // GET /api/v1/accommodation/cleaner/:id — Single (cleaner: an accommodation requested by the host)
 router.get(
   "/cleaner/:id",

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Accommodation } from "./accommodation.model";
-import { IAccommodation } from "./accommodation.interface";
+import { IAccommodation, TAccommodationStatus } from "./accommodation.interface";
 import AppError from "../../error/appError";
 import { User } from "../user/user.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
@@ -40,11 +40,15 @@ const createAccommodation = async (
   return newAccommodation;
 };
 
-// ─── Get My Accommodations (with filter + pagination) ─────────────────────────
+// ─── Shared listing (filter + pagination + host annotations) ──────────────────
+// Backs getMyAccommodations and the two lifecycle-scoped endpoints (housing /
+// planning). Pass opts.status to lock the list to a lifecycle stage; otherwise
+// the raw ?status query param (scheduled | not_scheduled) is honoured.
 
-const getMyAccommodations = async (
+const listHostAccommodations = async (
   hostId: string,
   query: Record<string, unknown>,
+  opts: { status?: TAccommodationStatus; onlyAssigned?: boolean } = {},
 ) => {
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 10;
@@ -52,8 +56,11 @@ const getMyAccommodations = async (
 
   const filter: any = { host: hostId, isDeleted: false };
 
-  // Filter by status
-  if (query.status) {
+  // Lifecycle stage is locked by the caller (housing / planning); otherwise the
+  // raw ?status query param applies.
+  if (opts.status) {
+    filter.status = opts.status;
+  } else if (query.status) {
     filter.status = query.status;
   }
 
@@ -80,8 +87,33 @@ const getMyAccommodations = async (
     })
   ).map(String);
 
-  // Filter by whether a cleaner is assigned (accepted)
-  if (query.isCleanerAssigned !== undefined) {
+  // Lock the list to accommodations whose cleaner has ACCEPTED (planning stage).
+  if (opts.onlyAssigned) {
+    filter._id = { $in: assignedIds };
+  } else if (query.cleanerStage) {
+    // Filter housing by the cleaner-assignment sub-stage:
+    //   new      → no cleaner requested yet
+    //   assigned → a cleaner was requested but hasn't accepted
+    //   accepted → a cleaner accepted the request
+    const stage = String(query.cleanerStage);
+    if (stage === "accepted") {
+      filter._id = { $in: assignedIds };
+    } else if (stage === "assigned") {
+      const anyAssignedIds = (
+        await CleanerAssignment.distinct("accommodation", { host: hostId })
+      ).map(String);
+      const pendingIds = anyAssignedIds.filter(
+        (id) => !assignedIds.includes(id),
+      );
+      filter._id = { $in: pendingIds };
+    } else if (stage === "new") {
+      const anyAssignedIds = (
+        await CleanerAssignment.distinct("accommodation", { host: hostId })
+      ).map(String);
+      filter._id = { $nin: anyAssignedIds };
+    }
+  } else if (query.isCleanerAssigned !== undefined) {
+    // Filter by whether a cleaner is assigned (accepted)
     const wantAssigned = query.isCleanerAssigned === "true";
     filter._id = wantAssigned ? { $in: assignedIds } : { $nin: assignedIds };
   }
@@ -153,11 +185,20 @@ const getMyAccommodations = async (
 
   // annotate each item with isCleanerAssigned + the assigned cleaners for the UI
   const data = rows.map((a) => {
-    const latestSchedule = scheduleByAccommodation.get(String(a._id));
+    const id = String(a._id);
+    const latestSchedule = scheduleByAccommodation.get(id);
+    const cleaners = cleanersByAccommodation.get(id) ?? [];
+    // Cleaner-assignment sub-stage (housing view): new → assigned → accepted
+    const cleanerStage = assignedIds.includes(id)
+      ? "accepted"
+      : cleaners.length
+        ? "assigned"
+        : "new";
     return {
       ...a.toObject(),
       isCleanerAssigned: assignedIds.includes(String(a._id)),
-      assignedCleaners: cleanersByAccommodation.get(String(a._id)) ?? [],
+      cleanerStage,
+      assignedCleaners: cleaners,
       paymentStatus: paymentByAccommodation.get(String(a._id))?.status ?? null,
       latestPayment: paymentByAccommodation.get(String(a._id)) ?? null,
       scheduleId: latestSchedule ? String(latestSchedule._id) : null,
@@ -172,6 +213,131 @@ const getMyAccommodations = async (
     data,
     meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
   };
+};
+
+// ─── Get My Accommodations (with filter + pagination) ─────────────────────────
+// Unchanged behaviour: honours ?status, ?isCleanerAssigned, ?city, ?search, etc.
+
+const getMyAccommodations = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => listHostAccommodations(hostId, query);
+
+// ─── Housing: created + cleaner-assignment stage (not scheduled yet) ──────────
+// "accommodation created + cleaner assigned/not". Combine with
+// ?isCleanerAssigned=true/false to split assigned vs no-cleaner.
+
+const getHousingAccommodations = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => listHostAccommodations(hostId, query, { status: "not_scheduled" });
+
+// ─── Planning: from cleaner acceptance → completion (all active data) ─────────
+// Entry point is an ACCEPTED cleaner assignment (not merely a created listing).
+// For each such accommodation we return the FULL chain the host cares about:
+// the accepted cleaner → every schedule (with its cleaner response, in-progress
+// / proof / completion / dispute state) → the payment tied to each schedule.
+
+const PLANNING_STEPS = [
+  "scheduled",
+  "accepted",
+  "in_progress",
+  "proof_submitted",
+  "completed",
+] as const;
+
+// How far along the schedule is (0 = just sent … 5 = completed); refused /
+// cancelled / disputed are terminal branches, not points on the happy path.
+const scheduleProgress = (status: string): number => {
+  if (status === "completed") return 5;
+  const idx = PLANNING_STEPS.indexOf(status as any);
+  return idx >= 0 ? idx + 1 : 0;
+};
+
+// Full schedule chain for a set of accommodations: each schedule with its
+// cleaner, progress/response, proof/dispute state and the payment tied to it.
+// Returned newest-cleaning-first; each item keeps its `accommodation` id so the
+// caller can group by accommodation.
+const fetchScheduleChain = async (match: Record<string, unknown>) => {
+  const schedules = await CleaningSchedule.find(match)
+    .populate("cleaner", "firstName lastName name profileImage")
+    .sort({ date: -1, createdAt: -1 });
+
+  const scheduleIds = schedules.map((s) => s._id);
+  const payments = await Payment.find({
+    schedule: { $in: scheduleIds },
+  }).select(
+    "schedule status amount currency platformFee cleanerAmount createdAt",
+  );
+
+  const paymentBySchedule = new Map<string, any>();
+  for (const p of payments) {
+    paymentBySchedule.set(String(p.schedule), {
+      paymentId: p._id,
+      status: p.status,
+      amount: p.amount,
+      currency: p.currency,
+      platformFee: p.platformFee,
+      cleanerAmount: p.cleanerAmount,
+      createdAt: p.createdAt,
+    });
+  }
+
+  return (schedules as any[]).map((s) => ({
+    accommodation: String(s.accommodation),
+    scheduleId: s._id,
+    cleaner: s.cleaner,
+    date: s.date,
+    checkInTime: s.checkInTime,
+    checkOutTime: s.checkOutTime,
+    notes: s.notes,
+    status: s.status,
+    statusLabel: scheduleEventLabel(s.status),
+    cleanerResponse: cleanerResponseOf(s.status),
+    progress: scheduleProgress(s.status),
+    paymentStatus: s.paymentStatus,
+    proofPhotos: s.proofPhotos ?? [],
+    proofNotes: s.proofNotes ?? null,
+    proofSubmittedAt: s.proofSubmittedAt ?? null,
+    dispute: s.dispute ?? null,
+    completedAt: s.completedAt ?? null,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+    payment: paymentBySchedule.get(String(s._id)) ?? null,
+  }));
+};
+
+const getPlanningAccommodations = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => {
+  const base = await listHostAccommodations(hostId, query, {
+    onlyAssigned: true,
+  });
+
+  const pageIds = base.data.map((a: any) => a._id);
+  if (pageIds.length === 0) return base;
+
+  const chain = await fetchScheduleChain({
+    host: hostId,
+    accommodation: { $in: pageIds },
+  });
+
+  // group full schedule detail per accommodation
+  const schedulesByAccommodation = new Map<string, any[]>();
+  for (const item of chain) {
+    if (!schedulesByAccommodation.has(item.accommodation)) {
+      schedulesByAccommodation.set(item.accommodation, []);
+    }
+    schedulesByAccommodation.get(item.accommodation)!.push(item);
+  }
+
+  const data = base.data.map((a: any) => ({
+    ...a,
+    schedules: schedulesByAccommodation.get(String(a._id)) ?? [],
+  }));
+
+  return { data, meta: base.meta };
 };
 
 // ─── Host dashboard: recommended_schedule (iCal turnovers) + to_do (activity) ──
@@ -363,8 +529,22 @@ const getHostDashboard = async (
       .populate("accommodation", ACC_CARD_FIELDS),
   ]);
 
+  // Only surface entries where the CLEANER has interacted — skip host-initiated
+  // states that are still waiting on the cleaner (schedule "scheduled" /
+  // "cancelled", assignment "pending").
+  const CLEANER_SCHEDULE_STATUSES = new Set([
+    "accepted",
+    "refused",
+    "in_progress",
+    "proof_submitted",
+    "completed",
+    "disputed",
+  ]);
+  const CLEANER_ASSIGNMENT_STATUSES = new Set(["accepted", "refused"]);
+
   const events: any[] = [];
   for (const s of schedules) {
+    if (!CLEANER_SCHEDULE_STATUSES.has(s.status)) continue;
     events.push({
       kind: "schedule",
       scheduleId: String(s._id),
@@ -376,6 +556,7 @@ const getHostDashboard = async (
     });
   }
   for (const a of assignments) {
+    if (!CLEANER_ASSIGNMENT_STATUSES.has(a.status)) continue;
     events.push({
       kind: "assignment",
       assignmentId: String(a._id),
@@ -442,6 +623,13 @@ const getAccommodationById = async (hostId: string, accommodationId: string) => 
     .sort({ createdAt: -1 })
     .select("status date createdAt");
 
+  // Full chain: every schedule created for this accommodation (newest first),
+  // each with its cleaner, progress/response, proof/dispute and payment.
+  const schedules = await fetchScheduleChain({
+    host: hostId,
+    accommodation: accommodationId,
+  });
+
   return {
     ...accommodation.toObject(),
     isCleanerAssigned: assignments.some((a) => a.status === "accepted"),
@@ -460,6 +648,7 @@ const getAccommodationById = async (hostId: string, accommodationId: string) => 
     scheduleCleanerResponse: latestSchedule
       ? cleanerResponseOf(latestSchedule.status)
       : null,
+    schedules,
   };
 };
 
@@ -586,6 +775,8 @@ const deleteAccommodation = async (hostId: string, accommodationId: string) => {
 export const AccommodationService = {
   createAccommodation,
   getMyAccommodations,
+  getHousingAccommodations,
+  getPlanningAccommodations,
   getHostDashboard,
   getAccommodationById,
   getAccommodationForCleaner,

@@ -3,6 +3,8 @@ import { z } from "zod";
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // HH:mm 24h
 
 export const createScheduleSchema = z.object({
+  // which assigned cleaner (primary/substitute) to schedule this cleaning for
+  cleanerId: z.string().min(1, "cleanerId is required"),
   date: z.string().refine((v) => !isNaN(Date.parse(v)), "Invalid date"),
   checkInTime: z.string().regex(timeRegex, "checkInTime must be HH:mm"),
   checkOutTime: z.string().regex(timeRegex, "checkOutTime must be HH:mm"),
@@ -12,6 +14,8 @@ export const createScheduleSchema = z.object({
 
 // host edits an existing schedule (all fields optional)
 export const updateScheduleSchema = z.object({
+  // optionally re-assign to a different accepted cleaner
+  cleanerId: z.string().min(1).optional(),
   date: z
     .string()
     .refine((v) => !isNaN(Date.parse(v)), "Invalid date")

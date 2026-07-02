@@ -313,6 +313,24 @@ const getAcceptedPrimary = async (accommodationId: string | Types.ObjectId) => {
   });
 };
 
+// A specific cleaner's ACCEPTED assignment (primary or substitute) on an
+// accommodation — used when the host picks who to schedule. The id may be the
+// cleaner's user id OR the assignment's own id (the host UI has both), so we
+// match either. Returns null if not assigned there / not accepted yet.
+const getAcceptedAssignment = async (
+  accommodationId: string | Types.ObjectId,
+  cleanerOrAssignmentId: string | Types.ObjectId,
+) => {
+  const id = String(cleanerOrAssignmentId);
+  if (!Types.ObjectId.isValid(id)) return null;
+
+  return CleanerAssignment.findOne({
+    accommodation: accommodationId,
+    status: "accepted",
+    $or: [{ cleaner: id }, { _id: id }],
+  });
+};
+
 export const AssignmentService = {
   assignCleaner,
   respondToAssignment,
@@ -324,4 +342,5 @@ export const AssignmentService = {
   getMyRequests,
   getMyAccommodations,
   getAcceptedPrimary,
+  getAcceptedAssignment,
 };
