@@ -6,6 +6,7 @@ import AppError from "../../error/appError";
 import { User } from "../user/user.model";
 import { CleaningSchedule } from "../schedule/schedule.model";
 import { Accommodation } from "../accommodation/accommodation.model";
+import { CleanerAssignment } from "../assignment/assignment.model";
 import { NotificationService } from "../notification/notification.service";
 
 const CURRENCY = config.platform_currency || "usd";
@@ -107,7 +108,12 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
   const accommodation = await Accommodation.findById(schedule.accommodation);
   if (!accommodation) throw new AppError(404, "Accommodation not found");
 
-  const amount = Math.round((accommodation.cleaningRate || 0) * 100);
+  // Charge the price agreed with this cleaner (assignment.pricePerCleaning),
+  // falling back to the accommodation's default cleaning rate.
+  const assignment = await CleanerAssignment.findById(schedule.assignment);
+  const unitPrice = assignment?.pricePerCleaning ?? accommodation.cleaningRate ?? 0;
+
+  const amount = Math.round((unitPrice || 0) * 100);
   if (amount <= 0) throw new AppError(400, "Invalid cleaning rate");
   const platformFee = Math.round((amount * FEE_PERCENT) / 100);
   const cleanerAmount = amount - platformFee;

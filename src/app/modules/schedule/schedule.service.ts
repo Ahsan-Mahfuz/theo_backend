@@ -7,6 +7,10 @@ import { NotificationService } from "../notification/notification.service";
 import { PaymentService } from "../payment/payment.service";
 import { Payment } from "../payment/payment.model";
 import AppError from "../../error/appError";
+import config from "../../config";
+
+// Currency the host is charged in (matches the payment module).
+const PAY_CURRENCY = config.platform_currency || "usd";
 
 // Estimated duration (in hours) between checkInTime and checkOutTime ("HH:mm")
 const estimationHours = (checkInTime: string, checkOutTime: string): number => {
@@ -70,6 +74,18 @@ const normalizeHost = (host: any) => {
 // Shape a schedule into a cleaner-facing mission card (Home / Planning screens)
 const toMissionCard = (s: any) => {
   const obj = s.toObject ? s.toObject() : s;
+  // How much the host is paying the cleaner for this job: the agreed price on
+  // the assignment, falling back to the accommodation's cleaning rate.
+  const assignment = obj.assignment;
+  const accommodation = obj.accommodation;
+  const payAmount =
+    (assignment && typeof assignment === "object"
+      ? assignment.pricePerCleaning
+      : undefined) ??
+    (accommodation && typeof accommodation === "object"
+      ? accommodation.cleaningRate
+      : undefined) ??
+    null;
   return {
     ...obj,
     host: normalizeHost(obj.host),
@@ -77,6 +93,8 @@ const toMissionCard = (s: any) => {
     dayLabel: dayLabelOf(new Date(obj.date)),
     estimationHours: estimationHours(obj.checkInTime, obj.checkOutTime),
     cleanerResponse: cleanerResponseOf(obj.status),
+    payAmount,
+    payCurrency: PAY_CURRENCY,
   };
 };
 
@@ -461,8 +479,9 @@ const getCleanerSchedules = async (
 
   const [data, total] = await Promise.all([
     CleaningSchedule.find(filter)
-      .populate("accommodation", "name address city photos accommodationType surface floor numberOfRooms keys accessCode instructions")
+      .populate("accommodation", "name address city photos accommodationType surface floor numberOfRooms keys accessCode instructions cleaningRate")
       .populate("host", "firstName lastName name profileImage phone")
+      .populate("assignment", "pricePerCleaning role")
       .sort({ date: 1 })
       .skip(skip)
       .limit(limit),
@@ -479,7 +498,7 @@ const getCleanerSchedules = async (
 
 // ─── Cleaner: Home (dashboard — today's cleaning + upcoming) ───────────────────
 const ACCOMMODATION_CARD_FIELDS =
-  "name address city photos accommodationType surface floor numberOfRooms";
+  "name address city photos accommodationType surface floor numberOfRooms cleaningRate";
 
 // Payment is "paid" once the host has funded the escrow (paid_held) and stays
 // paid after the payout is released to the cleaner (released).
@@ -511,6 +530,7 @@ const getCleanerHome = async (cleanerId: string) => {
       })
         .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
         .populate("host", "firstName lastName name profileImage phone")
+        .populate("assignment", "pricePerCleaning role")
         .sort({ checkInTime: 1 }),
 
       // Upcoming tasks (future days, still active) — paid only
@@ -522,6 +542,7 @@ const getCleanerHome = async (cleanerId: string) => {
       })
         .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
         .populate("host", "firstName lastName name profileImage phone")
+        .populate("assignment", "pricePerCleaning role")
         .sort({ date: 1, checkInTime: 1 })
         .limit(10),
 
@@ -584,6 +605,7 @@ const getCleanerPlanning = async (
   const schedules = await CleaningSchedule.find(filter)
     .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
     .populate("host", "firstName lastName name profileImage phone")
+    .populate("assignment", "pricePerCleaning role")
     .sort({ date: 1, checkInTime: 1 });
 
   const missions = schedules.map((s) => toMissionCard(s));
