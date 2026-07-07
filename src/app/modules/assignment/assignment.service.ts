@@ -45,7 +45,17 @@ const assignCleaner = async (
     cleaner: payload.cleanerId,
   });
   if (existing) {
-    throw new AppError(409, "This cleaner is already assigned to this accommodation");
+    if (existing.status === "pending") {
+      throw new AppError(409, "A request is already pending for this cleaner");
+    }
+    if (existing.status === "accepted") {
+      throw new AppError(
+        409,
+        "This cleaner is already assigned to this accommodation",
+      );
+    }
+    // Only "refused" reaches here — allow the host to re-invite by reviving the
+    // same record as a fresh pending request (avoids the unique-index clash).
   }
 
   // If assigning as primary, demote any current primary to substitute.
@@ -56,15 +66,26 @@ const assignCleaner = async (
     );
   }
 
-  const assignment = await CleanerAssignment.create({
-    accommodation: accommodationId,
-    host: hostId,
-    cleaner: payload.cleanerId,
-    role: payload.role,
-    pricePerCleaning: payload.pricePerCleaning ?? accommodation.cleaningRate,
-    message: payload.message,
-    status: "pending",
-  });
+  let assignment;
+  if (existing) {
+    existing.role = payload.role;
+    existing.status = "pending";
+    existing.pricePerCleaning =
+      payload.pricePerCleaning ?? accommodation.cleaningRate;
+    existing.message = payload.message;
+    existing.respondedAt = undefined;
+    assignment = await existing.save();
+  } else {
+    assignment = await CleanerAssignment.create({
+      accommodation: accommodationId,
+      host: hostId,
+      cleaner: payload.cleanerId,
+      role: payload.role,
+      pricePerCleaning: payload.pricePerCleaning ?? accommodation.cleaningRate,
+      message: payload.message,
+      status: "pending",
+    });
+  }
 
   await NotificationService.createNotification({
     user: payload.cleanerId,
@@ -198,6 +219,20 @@ const findHousekeepers = async (query: Record<string, unknown>) => {
     data,
     meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
   };
+};
+
+// ─── Host: this cleaner's status across the host's own accommodations ─────────
+// Powers the "select accommodation" step: for each of the host's properties we
+// can show whether this cleaner already has a request pending / is already added.
+const getCleanerAssignmentsForHost = async (
+  hostId: string,
+  cleanerId: string,
+) => {
+  if (!Types.ObjectId.isValid(cleanerId)) return [];
+
+  return CleanerAssignment.find({ host: hostId, cleaner: cleanerId })
+    .select("accommodation role status createdAt")
+    .lean();
 };
 
 // ─── Single cleaner profile (the housekeeper detail screen) ───────────────────
@@ -339,6 +374,7 @@ export const AssignmentService = {
   getAccommodationCleaners,
   findHousekeepers,
   getCleanerProfile,
+  getCleanerAssignmentsForHost,
   getMyRequests,
   getMyAccommodations,
   getAcceptedPrimary,

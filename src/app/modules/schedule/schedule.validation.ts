@@ -41,3 +41,8 @@ export const disputeSchema = z.object({
 export const respondScheduleSchema = z.object({
   action: z.enum(["accept", "refuse"]),
 });
+
+// host rejects the submitted proof (optional reason shown to the cleaner)
+export const invalidateProofSchema = z.object({
+  reason: z.string().optional(),
+});

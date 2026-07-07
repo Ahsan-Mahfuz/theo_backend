@@ -209,9 +209,14 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
             : pi.latest_charge?.id;
         await payment.save();
 
-        await CleaningSchedule.findByIdAndUpdate(payment.schedule, {
-          paymentStatus: "paid_held",
-        });
+        // Fund the escrow and move the job into "in_progress" so the cleaner
+        // can start. Only advance from "accepted" — never clobber a later state.
+        const sched = await CleaningSchedule.findById(payment.schedule);
+        if (sched) {
+          sched.paymentStatus = "paid_held";
+          if (sched.status === "accepted") sched.status = "in_progress";
+          await sched.save();
+        }
 
         await NotificationService.createNotification({
           user: String(payment.cleaner),
@@ -356,7 +361,7 @@ const buildList = async (filter: any, query: Record<string, unknown>) => {
     Payment.find(filter)
       .populate("host", "firstName lastName name email")
       .populate("cleaner", "firstName lastName name email")
-      .populate("accommodation", "name")
+      .populate("accommodation", "name address city zipCode")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),

@@ -184,6 +184,7 @@ const getMonthCalendar = async (
       checkInTime: s.checkInTime,
       checkOutTime: s.checkOutTime,
       status: s.status,
+      paymentStatus: s.paymentStatus,
       booking: s.booking,
       cleaner: s.cleaner,
     })),
@@ -245,6 +246,7 @@ const getList = async (
               checkInTime: schedule.checkInTime,
               checkOutTime: schedule.checkOutTime,
               status: schedule.status,
+              paymentStatus: schedule.paymentStatus,
               cleaner: schedule.cleaner,
             }
           : null,

@@ -42,6 +42,11 @@ export interface ICleaningSchedule extends Document {
   dispute?: IDispute;
   completedAt?: Date;
 
+  // host rejected the submitted proof (sent back to the cleaner to redo)
+  invalidationReason?: string;
+  invalidatedAt?: Date;
+  invalidationCount: number;
+
   createdAt: Date;
   updatedAt: Date;
 }

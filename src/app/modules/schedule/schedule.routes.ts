@@ -7,6 +7,7 @@ import {
   createScheduleSchema,
   updateScheduleSchema,
   respondScheduleSchema,
+  invalidateProofSchema,
 } from "./schedule.validation";
 
 const router = express.Router();
@@ -24,11 +25,19 @@ router.post(
 // GET /api/v1/schedule/host — host's schedules (?status&accommodationId&page&limit)
 router.get("/host", auth("admin", "host"), ScheduleController.getHostSchedules);
 
-// PATCH /api/v1/schedule/:id/complete — host completes/accepts the task
+// PATCH /api/v1/schedule/:id/complete — host validates the cleaning (releases funds)
 router.patch(
   "/:id/complete",
   auth("admin", "host"),
   ScheduleController.completeTask,
+);
+
+// PATCH /api/v1/schedule/:id/invalidate — host rejects the proof (sends it back)
+router.patch(
+  "/:id/invalidate",
+  auth("admin", "host"),
+  validateRequest(invalidateProofSchema),
+  ScheduleController.invalidateProof,
 );
 
 // PATCH /api/v1/schedule/:id — host edits a schedule (only before cleaner accepts)

@@ -104,14 +104,21 @@ const sendMessage = catchAsync(async (req: Request, res: Response) => {
 // Edit a message (REST) — also broadcasts message:edited over socket.
 const editMessage = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
-  const message = await ChatService.editMessage(
-    req.params.messageId,
-    userId,
-    req.body.content,
-  );
+  const message = await ChatService.editMessage(req.params.messageId, userId, {
+    content: req.body.content,
+    fileUrl: req.body.fileUrl,
+    fileName: req.body.fileName,
+    fileSize: req.body.fileSize,
+    messageType: req.body.messageType,
+  });
   emitToConversation(String(message.conversation), "message:edited", {
     _id: String(message._id),
     content: message.content,
+    messageType: message.messageType,
+    fileUrl: message.fileUrl,
+    fileName: message.fileName,
+    fileSize: message.fileSize,
+    isEdited: true,
   });
   sendResponse(res, {
     statusCode: 200,

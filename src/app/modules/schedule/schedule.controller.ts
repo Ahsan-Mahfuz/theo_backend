@@ -78,6 +78,19 @@ const completeTask = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const invalidateProof = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await ScheduleService.invalidateProof(hostId, req.params.id, {
+    reason: req.body.reason,
+  });
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Cleaning invalidated and sent back to the cleaner",
+    data: result,
+  });
+});
+
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 
 const respondToSchedule = catchAsync(async (req: Request, res: Response) => {
@@ -182,6 +195,7 @@ export const ScheduleController = {
   deleteSchedule,
   getHostSchedules,
   completeTask,
+  invalidateProof,
   respondToSchedule,
   getCleanerSchedules,
   getCleanerHome,

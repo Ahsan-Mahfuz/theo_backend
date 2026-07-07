@@ -5,6 +5,7 @@ import { User } from "../user/user.model";
 import AppError from "../../error/appError";
 import { generateOtp } from "../../utilities/generateOtp";
 import sendEmail from "../../utilities/sendEmail";
+import otpEmailTemplate from "../../mailTemplate/otpEmail";
 import config from "../../config";
 import {
   ITokenPayload,
@@ -133,11 +134,12 @@ const signUp = async (payload: ISignUp) => {
   await sendEmail({
     email: payload.email,
     subject: "Gestlio – Email Verification",
-    html: `
-      <h2>Verify Your Email</h2>
-      <p>Use the OTP below to verify your account. It expires in <strong>10 minutes</strong>.</p>
-      <h1 style="letter-spacing:8px; color:#1E90FF;">${otp}</h1>
-    `,
+    html: otpEmailTemplate({
+      otp,
+      heading: "Verify your email",
+      intro: "Welcome to Gestlio! Use the code below to verify your account and get started.",
+      minutes: 10,
+    }),
   });
 
   return { message: "OTP sent to your email" };
@@ -204,11 +206,12 @@ const resendOtp = async (email: string) => {
   await sendEmail({
     email: user.email,
     subject: "Gestlio – Resend OTP",
-    html: `
-      <h2>Your New OTP</h2>
-      <p>Use the OTP below. It expires in <strong>10 minutes</strong>.</p>
-      <h1 style="letter-spacing:8px; color:#1E90FF;">${otp}</h1>
-    `,
+    html: otpEmailTemplate({
+      otp,
+      heading: "Your new code",
+      intro: "Here's a fresh verification code as requested. Enter it to continue.",
+      minutes: 10,
+    }),
   });
 
   return { message: "OTP resent to your email" };
@@ -250,11 +253,12 @@ const forgotPassword = async (payload: IForgotPassword) => {
   await sendEmail({
     email: user.email,
     subject: "Gestlio – Password Reset OTP",
-    html: `
-      <h2>Password Reset Request</h2>
-      <p>Use the OTP below to reset your password. It expires in <strong>10 minutes</strong>.</p>
-      <h1 style="letter-spacing:8px; color:#1E90FF;">${otp}</h1>
-    `,
+    html: otpEmailTemplate({
+      otp,
+      heading: "Reset your password",
+      intro: "We received a request to reset your password. Use the code below to proceed.",
+      minutes: 10,
+    }),
   });
 
   return { message: "OTP sent to your email" };

@@ -26,6 +26,14 @@ router.get(
   AssignmentController.getCleanerProfile,
 );
 
+// GET /api/v1/assignment/housekeepers/:cleanerId/assignments —
+// this cleaner's request/assignment status across the host's accommodations
+router.get(
+  "/housekeepers/:cleanerId/assignments",
+  auth("admin", "host"),
+  AssignmentController.getCleanerAssignments,
+);
+
 // ─── Cleaner inbox ────────────────────────────────────────────────────────────
 
 // GET /api/v1/assignment/my-requests — cleaner's incoming requests (?status&page&limit)

@@ -2,12 +2,21 @@ import { Document, Types } from "mongoose";
 
 export type TAccommodationStatus = "scheduled" | "not_scheduled";
 
+export type TAccommodationType = "House" | "Apartment" | "Studio" | "Other";
+
+export const ACCOMMODATION_TYPES: TAccommodationType[] = [
+  "House",
+  "Apartment",
+  "Studio",
+  "Other",
+];
+
 export interface IAccommodation extends Document {
   // ─── Step 1: General Information ────────────────────────────────────────────
   name: string;
-  accommodationType: string; // Apartment, House, Studio, etc.
+  accommodationType: TAccommodationType;
   address: string;
-  city: string;
+  city: string; // free text
   zipCode: string;
 
   // ─── Step 2: Accommodation Details ──────────────────────────────────────────

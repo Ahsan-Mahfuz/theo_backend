@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ACCOMMODATION_TYPES } from "./accommodation.interface";
 
 // Since this comes via formData, all fields arrive as strings.
 // We use z.preprocess to coerce numbers and booleans.
@@ -17,9 +18,11 @@ const toBoolean = (v: unknown) => {
 export const createAccommodationSchema = z.object({
   // Step 1: General Information
   name: z.string().min(2, "Accommodation name must be at least 2 characters"),
-  accommodationType: z.string().min(1, "Accommodation type is required"),
+  accommodationType: z.enum(ACCOMMODATION_TYPES as [string, ...string[]], {
+    errorMap: () => ({ message: "Invalid accommodation type" }),
+  }),
   address: z.string().min(5, "Address must be at least 5 characters"),
-  city: z.string().min(1, "City is required"),
+  city: z.string().min(1, "City is required"), // free text
   zipCode: z.string().min(1, "Zip code is required"),
 
   // Step 2: Accommodation Details
@@ -40,7 +43,11 @@ export const createAccommodationSchema = z.object({
 
 export const updateAccommodationSchema = z.object({
   name: z.string().min(2).optional(),
-  accommodationType: z.string().optional(),
+  accommodationType: z
+    .enum(ACCOMMODATION_TYPES as [string, ...string[]], {
+      errorMap: () => ({ message: "Invalid accommodation type" }),
+    })
+    .optional(),
   address: z.string().min(5).optional(),
   city: z.string().optional(),
   zipCode: z.string().optional(),

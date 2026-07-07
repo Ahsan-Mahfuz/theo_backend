@@ -177,21 +177,45 @@ const createMessage = async (
 };
 
 // ─── Edit a message ───────────────────────────────────────────────────────────
+// Supports editing the caption/text AND replacing the attachment (image/file).
 const editMessage = async (
   messageId: string,
   senderId: string,
-  content: string,
+  update: {
+    content?: string;
+    fileUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    messageType?: TMessageType;
+  },
 ) => {
   const message = await Message.findOne({ _id: messageId, sender: senderId });
   if (!message) throw new AppError(404, "Message not found");
   if (message.isDeleted) throw new AppError(400, "Cannot edit a deleted message");
-  if (message.messageType !== "text") {
-    throw new AppError(400, "Only text messages can be edited");
+
+  // Replace the attachment if a new one was uploaded.
+  if (update.fileUrl) {
+    message.fileUrl = update.fileUrl;
+    message.fileName = update.fileName;
+    message.fileSize = update.fileSize;
+    message.messageType = update.messageType || message.messageType;
+  }
+  // Update the caption/text (may be cleared for a file message).
+  if (update.content !== undefined) {
+    message.content = update.content;
   }
 
-  message.content = content;
+  // The message must still carry something meaningful after the edit.
+  if (message.messageType === "text" && !message.content) {
+    throw new AppError(400, "Text message requires content");
+  }
+  if (message.messageType !== "text" && !message.fileUrl) {
+    throw new AppError(400, "File message requires an attachment");
+  }
+
   message.isEdited = true;
   await message.save();
+  await message.populate("sender", PARTICIPANT_FIELDS);
   return message;
 };
 

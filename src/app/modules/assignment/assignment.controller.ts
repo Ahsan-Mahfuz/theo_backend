@@ -86,6 +86,20 @@ const getCleanerProfile = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getCleanerAssignments = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await AssignmentService.getCleanerAssignmentsForHost(
+    hostId,
+    req.params.cleanerId,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Cleaner assignments retrieved successfully",
+    data: result,
+  });
+});
+
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 
 const respondToAssignment = catchAsync(async (req: Request, res: Response) => {
@@ -138,6 +152,7 @@ export const AssignmentController = {
   removeAssignment,
   findHousekeepers,
   getCleanerProfile,
+  getCleanerAssignments,
   respondToAssignment,
   getMyRequests,
   getMyAccommodations,

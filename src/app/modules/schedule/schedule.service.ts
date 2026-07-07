@@ -177,8 +177,10 @@ const createSchedule = async (
     status: "scheduled",
   });
 
-  accommodation.status = "scheduled";
-  await accommodation.save();
+  // Targeted status update — a full-document .save() would re-validate every
+  // field and fail on legacy records (e.g. an accommodationType not in the
+  // current enum), blocking scheduling for an unrelated reason.
+  await Accommodation.findByIdAndUpdate(accommodationId, { status: "scheduled" });
 
   await NotificationService.createNotification({
     user: String(assignment.cleaner),
@@ -400,8 +402,29 @@ const getHostSchedules = async (
   const skip = (page - 1) * limit;
 
   const filter: any = { host: hostId };
-  if (query.status) filter.status = query.status;
   if (query.accommodationId) filter.accommodation = query.accommodationId;
+
+  // Named lifecycle views for the host planning-list tabs. These map the raw
+  // status + paymentStatus into the buckets the UI shows:
+  //   awaiting → schedule sent, cleaner hasn't accepted yet
+  //   accepted → cleaner accepted (paid or not)
+  //   pay_now  → cleaner accepted but the host hasn't paid yet
+  //   paid     → escrow funded (held) or already released to the cleaner
+  const view = query.view ? String(query.view) : undefined;
+  if (view === "awaiting") {
+    filter.status = "scheduled";
+  } else if (view === "accepted") {
+    // "accepted" covers cleaner-accepted jobs whether or not the host has paid.
+    // Once paid, the job advances to "in_progress" — keep it in this tab too.
+    filter.status = { $in: ["accepted", "in_progress"] };
+  } else if (view === "pay_now") {
+    filter.status = "accepted";
+    filter.paymentStatus = "unpaid";
+  } else if (view === "paid") {
+    filter.paymentStatus = { $in: ["paid_held", "released"] };
+  } else if (query.status) {
+    filter.status = query.status;
+  }
 
   const [data, total] = await Promise.all([
     CleaningSchedule.find(filter)
@@ -749,6 +772,55 @@ const completeTask = async (hostId: string, scheduleId: string) => {
   return schedule;
 };
 
+// ─── Host: invalidate the submitted proof (send back to the cleaner) ──────────
+const invalidateProof = async (
+  hostId: string,
+  scheduleId: string,
+  payload: { reason?: string },
+) => {
+  const schedule = await CleaningSchedule.findOne({
+    _id: scheduleId,
+    host: hostId,
+  }).populate("accommodation", "name");
+  if (!schedule) throw new AppError(404, "Schedule not found");
+
+  if (schedule.status === "completed") {
+    throw new AppError(
+      400,
+      "This task is already completed and can no longer be invalidated.",
+    );
+  }
+  // The host can only reject work the cleaner has actually turned in.
+  if (!["proof_submitted", "disputed"].includes(schedule.status)) {
+    throw new AppError(
+      400,
+      "You can only invalidate a task after the cleaner has submitted proof.",
+    );
+  }
+
+  // Send the job back to the cleaner to redo and resubmit. The escrow (paid_held)
+  // stays untouched — funds are only released once the host validates. The job is
+  // paid, so it returns to "in_progress" (not "accepted").
+  schedule.status = "in_progress";
+  schedule.invalidationReason = payload.reason;
+  schedule.invalidatedAt = new Date();
+  schedule.invalidationCount = (schedule.invalidationCount || 0) + 1;
+  await schedule.save();
+
+  const accName = (schedule.accommodation as any)?.name || "an accommodation";
+  await NotificationService.createNotification({
+    user: String(schedule.cleaner),
+    title: "Cleaning not validated",
+    message: `The host did not validate the cleaning for ${accName}${
+      payload.reason ? `: ${payload.reason}` : ""
+    }. Please review and resubmit your proof.`,
+    type: "proof_submitted",
+    data: { scheduleId: String(schedule._id) },
+  });
+
+  return schedule;
+};
+
 export const ScheduleService = {
   createSchedule,
   updateSchedule,
@@ -762,4 +834,5 @@ export const ScheduleService = {
   submitProof,
   reportDispute,
   completeTask,
+  invalidateProof,
 };

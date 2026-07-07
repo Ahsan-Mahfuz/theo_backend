@@ -1,13 +1,17 @@
 import { Schema, model } from "mongoose";
-import { IAccommodation } from "./accommodation.interface";
+import { ACCOMMODATION_TYPES, IAccommodation } from "./accommodation.interface";
 
 const accommodationSchema = new Schema<IAccommodation>(
   {
     // ─── Step 1: General Information ──────────────────────────────────────────
     name: { type: String, required: true, trim: true },
-    accommodationType: { type: String, required: true },
+    accommodationType: {
+      type: String,
+      enum: ACCOMMODATION_TYPES,
+      required: true,
+    },
     address: { type: String, required: true },
-    city: { type: String, required: true },
+    city: { type: String, required: true, trim: true },
     zipCode: { type: String, required: true },
 
     // ─── Step 2: Accommodation Details ────────────────────────────────────────

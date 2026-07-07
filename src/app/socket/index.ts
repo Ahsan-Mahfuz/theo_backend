@@ -120,14 +120,22 @@ export const initSocket = (httpServer: HttpServer): Server => {
     // ─── Edit a message ─────────────────────────────────────────────────────────
     socket.on("message:edit", async (payload: any) => {
       try {
-        const message = await ChatService.editMessage(
-          payload.messageId,
-          userId,
-          payload.content,
-        );
-        io!
-          .to(conversationRoom(String(message.conversation)))
-          .emit("message:edited", { _id: String(message._id), content: message.content });
+        const message = await ChatService.editMessage(payload.messageId, userId, {
+          content: payload.content,
+          fileUrl: payload.fileUrl,
+          fileName: payload.fileName,
+          fileSize: payload.fileSize,
+          messageType: payload.messageType,
+        });
+        io!.to(conversationRoom(String(message.conversation))).emit("message:edited", {
+          _id: String(message._id),
+          content: message.content,
+          messageType: message.messageType,
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileSize: message.fileSize,
+          isEdited: true,
+        });
       } catch (err: any) {
         socket.emit("message:error", { error: err?.message || "Failed to edit" });
       }

@@ -6,7 +6,7 @@ import { User } from "../user/user.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
 import { Payment } from "../payment/payment.model";
 import { CleaningSchedule } from "../schedule/schedule.model";
-import { Booking } from "../calendar/calendar.model";
+import { Booking, CalendarConnection } from "../calendar/calendar.model";
 
 // Derive the cleaner's response to the latest schedule (what the host sees):
 //   pending  → schedule sent, cleaner hasn't responded yet
@@ -48,7 +48,11 @@ const createAccommodation = async (
 const listHostAccommodations = async (
   hostId: string,
   query: Record<string, unknown>,
-  opts: { status?: TAccommodationStatus; onlyAssigned?: boolean } = {},
+  opts: {
+    status?: TAccommodationStatus;
+    onlyAssigned?: boolean;
+    onlyUnassigned?: boolean;
+  } = {},
 ) => {
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 10;
@@ -79,7 +83,7 @@ const listHostAccommodations = async (
     filter.name = new RegExp(String(query.search), "i");
   }
 
-  // Accommodation ids that have an accepted cleaner (for this host)
+  // Accommodation ids that have an ACCEPTED cleaner (for this host)
   const assignedIds = (
     await CleanerAssignment.distinct("accommodation", {
       host: hostId,
@@ -87,11 +91,23 @@ const listHostAccommodations = async (
     })
   ).map(String);
 
-  // Lock the list to accommodations whose cleaner has ACCEPTED (planning stage).
-  if (opts.onlyAssigned) {
+  // Accommodation ids that have ANY cleaner assignment (pending/accepted/refused).
+  // Used only by the ?cleanerStage sub-filter below.
+  const anyAssignedIds = (
+    await CleanerAssignment.distinct("accommodation", { host: hostId })
+  ).map(String);
+
+  // The Housing ↔ Planning boundary is an ACCEPTED cleaner (assignedIds):
+  //   no accepted cleaner → Housing (created, still requesting / awaiting accept)
+  //   ≥ 1 accepted cleaner → Planning (full lifecycle tracking)
+  // A pending request keeps the accommodation in Housing until the cleaner
+  // accepts; removing the accepted cleaner drops it back into Housing.
+  if (opts.onlyUnassigned) {
+    filter._id = { $nin: assignedIds };
+  } else if (opts.onlyAssigned) {
     filter._id = { $in: assignedIds };
   } else if (query.cleanerStage) {
-    // Filter housing by the cleaner-assignment sub-stage:
+    // Filter by the cleaner-assignment sub-stage:
     //   new      → no cleaner requested yet
     //   assigned → a cleaner was requested but hasn't accepted
     //   accepted → a cleaner accepted the request
@@ -99,17 +115,11 @@ const listHostAccommodations = async (
     if (stage === "accepted") {
       filter._id = { $in: assignedIds };
     } else if (stage === "assigned") {
-      const anyAssignedIds = (
-        await CleanerAssignment.distinct("accommodation", { host: hostId })
-      ).map(String);
       const pendingIds = anyAssignedIds.filter(
         (id) => !assignedIds.includes(id),
       );
       filter._id = { $in: pendingIds };
     } else if (stage === "new") {
-      const anyAssignedIds = (
-        await CleanerAssignment.distinct("accommodation", { host: hostId })
-      ).map(String);
       filter._id = { $nin: anyAssignedIds };
     }
   } else if (query.isCleanerAssigned !== undefined) {
@@ -230,7 +240,7 @@ const getMyAccommodations = async (
 const getHousingAccommodations = async (
   hostId: string,
   query: Record<string, unknown>,
-) => listHostAccommodations(hostId, query, { status: "not_scheduled" });
+) => listHostAccommodations(hostId, query, { onlyUnassigned: true });
 
 // ─── Planning: from cleaner acceptance → completion (all active data) ─────────
 // Entry point is an ACCEPTED cleaner assignment (not merely a created listing).
@@ -307,6 +317,13 @@ const fetchScheduleChain = async (match: Record<string, unknown>) => {
   }));
 };
 
+// ─── Planning: "Connect my calendars" list ────────────────────────────────────
+// Backs the Calendar screen's left rail: only accommodations that have at least
+// one cleaner assigned (the Housing → Planning boundary), each annotated with
+// its connected iCal feeds (Airbnb / Booking.com / Vrbo / …) so the UI can show
+// the per-platform connection + last-sync state. Honours the shared
+// ?accommodationType / ?city / ?search / ?page / ?limit query params.
+
 const getPlanningAccommodations = async (
   hostId: string,
   query: Record<string, unknown>,
@@ -318,23 +335,37 @@ const getPlanningAccommodations = async (
   const pageIds = base.data.map((a: any) => a._id);
   if (pageIds.length === 0) return base;
 
-  const chain = await fetchScheduleChain({
+  const connections = await CalendarConnection.find({
     host: hostId,
     accommodation: { $in: pageIds },
-  });
+  })
+    .select(
+      "accommodation platform label icalUrl isActive lastSyncedAt lastSyncStatus lastSyncError",
+    )
+    .sort({ createdAt: 1 });
 
-  // group full schedule detail per accommodation
-  const schedulesByAccommodation = new Map<string, any[]>();
-  for (const item of chain) {
-    if (!schedulesByAccommodation.has(item.accommodation)) {
-      schedulesByAccommodation.set(item.accommodation, []);
+  // group the iCal connections per accommodation
+  const connectionsByAccommodation = new Map<string, any[]>();
+  for (const c of connections) {
+    const key = String(c.accommodation);
+    if (!connectionsByAccommodation.has(key)) {
+      connectionsByAccommodation.set(key, []);
     }
-    schedulesByAccommodation.get(item.accommodation)!.push(item);
+    connectionsByAccommodation.get(key)!.push({
+      connectionId: c._id,
+      platform: c.platform,
+      label: c.label ?? null,
+      icalUrl: c.icalUrl,
+      isActive: c.isActive,
+      lastSyncedAt: c.lastSyncedAt ?? null,
+      lastSyncStatus: c.lastSyncStatus ?? null,
+      lastSyncError: c.lastSyncError ?? null,
+    });
   }
 
   const data = base.data.map((a: any) => ({
     ...a,
-    schedules: schedulesByAccommodation.get(String(a._id)) ?? [],
+    connections: connectionsByAccommodation.get(String(a._id)) ?? [],
   }));
 
   return { data, meta: base.meta };

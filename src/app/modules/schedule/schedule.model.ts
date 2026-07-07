@@ -63,6 +63,11 @@ const scheduleSchema = new Schema<ICleaningSchedule>(
 
     dispute: { type: disputeSchema },
     completedAt: { type: Date },
+
+    // host rejected the submitted proof (sent back to the cleaner to redo)
+    invalidationReason: { type: String },
+    invalidatedAt: { type: Date },
+    invalidationCount: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

@@ -42,7 +42,8 @@ router.get(
   AccommodationController.getHousingAccommodations,
 );
 
-// GET /api/v1/accommodation/planning — Schedule + payment stage → completion (scheduled)
+// GET /api/v1/accommodation/planning — "Connect my calendars": all accommodations
+// + their connected iCal feeds. Query: ?accommodationType=&city=&search=&page=&limit=
 router.get(
   "/planning",
   auth("admin", "host"),
