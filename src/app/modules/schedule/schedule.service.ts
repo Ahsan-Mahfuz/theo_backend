@@ -644,7 +644,8 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
   const schedule = await CleaningSchedule.findById(scheduleId)
     .populate("accommodation")
     .populate("host", "firstName lastName name profileImage phone")
-    .populate("cleaner", "firstName lastName name profileImage phone");
+    .populate("cleaner", "firstName lastName name profileImage phone")
+    .populate("assignment", "pricePerCleaning role");
   if (!schedule) throw new AppError(404, "Schedule not found");
 
   const host = schedule.host as any;
@@ -659,13 +660,32 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
     .sort({ createdAt: -1 })
     .select("status amount currency createdAt");
 
+  // How much the host pays the cleaner for this job — same rule as the mission
+  // cards: assignment.pricePerCleaning, falling back to accommodation.cleaningRate.
+  const assignment = schedule.assignment as any;
+  const accommodation = schedule.accommodation as any;
+  const payAmount =
+    (assignment && typeof assignment === "object"
+      ? assignment.pricePerCleaning
+      : undefined) ??
+    (accommodation && typeof accommodation === "object"
+      ? accommodation.cleaningRate
+      : undefined) ??
+    null;
+
   return {
+    // Keep the schedule's own paymentStatus (escrow lifecycle: unpaid /
+    // paid_held / released) from the spread below. Do NOT override it with the
+    // Payment document's gateway status (pending / succeeded / …) — that's a
+    // different field and is exposed separately as latestPayment.status. The
+    // list endpoints return the schedule's paymentStatus, so this must match.
     ...schedule.toObject(),
     cleanerResponse: cleanerResponseOf(schedule.status),
     scheduleId: String(schedule._id),
     scheduleStatus: schedule.status,
     scheduleCleanerResponse: cleanerResponseOf(schedule.status),
-    paymentStatus: latestPayment?.status ?? null,
+    payAmount,
+    payCurrency: PAY_CURRENCY,
     latestPayment: latestPayment
       ? {
           status: latestPayment.status,

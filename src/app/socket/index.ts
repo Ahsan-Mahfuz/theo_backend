@@ -181,11 +181,13 @@ export const initSocket = (httpServer: HttpServer): Server => {
     // ─── Typing indicators ──────────────────────────────────────────────────────
     socket.on("typing:start", (payload: any) => {
       const id = pickConversationId(payload);
-      if (id) socket.to(conversationRoom(id)).emit("typing:start", { userId });
+      // Include conversationId so a client joined to multiple conversation rooms
+      // can scope the indicator to the thread it belongs to.
+      if (id) socket.to(conversationRoom(id)).emit("typing:start", { userId, conversationId: id });
     });
     socket.on("typing:stop", (payload: any) => {
       const id = pickConversationId(payload);
-      if (id) socket.to(conversationRoom(id)).emit("typing:stop", { userId });
+      if (id) socket.to(conversationRoom(id)).emit("typing:stop", { userId, conversationId: id });
     });
 
     // ─── Disconnect ─────────────────────────────────────────────────────────────
