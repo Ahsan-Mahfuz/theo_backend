@@ -34,6 +34,14 @@ router.get(
   AccommodationController.getHostDashboard,
 );
 
+// GET /api/v1/accommodation/recommended-schedule — Host: full paginated recommended list
+// Query: ?page=1&limit=10
+router.get(
+  "/recommended-schedule",
+  auth("admin", "host"),
+  AccommodationController.getRecommendedSchedules,
+);
+
 // GET /api/v1/accommodation/housing — Created + cleaner-assignment stage (not scheduled)
 // Query: ?isCleanerAssigned=true|false&accommodationType=&city=&search=&page=&limit=
 router.get(

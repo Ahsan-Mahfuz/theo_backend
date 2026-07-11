@@ -95,6 +95,24 @@ const getHostDashboard = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ─── Recommended schedule: full paginated list ("see all" page) ───────────────
+
+const getRecommendedSchedules = catchAsync(
+  async (req: Request, res: Response) => {
+    const hostId = (req as any).user.userId;
+    const result = await AccommodationService.getRecommendedSchedules(
+      hostId,
+      req.query as any,
+    );
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Recommended schedules retrieved successfully",
+      data: result,
+    });
+  },
+);
+
 // ─── Get Single Accommodation ─────────────────────────────────────────────────
 
 const getAccommodationById = catchAsync(
@@ -180,6 +198,7 @@ export const AccommodationController = {
   getHousingAccommodations,
   getPlanningAccommodations,
   getHostDashboard,
+  getRecommendedSchedules,
   getAccommodationById,
   getAccommodationForCleaner,
   updateAccommodation,

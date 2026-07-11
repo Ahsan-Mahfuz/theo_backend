@@ -426,25 +426,17 @@ const assignmentEventLabel = (status: string): string => {
   }
 };
 
-const getHostDashboard = async (
+// Build the full, sorted list of recommended cleanings for a host. Shared by
+// the dashboard home (sliced to the top few) and the paginated "see all" page.
+const buildRecommendations = async (
   hostId: string,
-  query: Record<string, unknown>,
-) => {
+  accById: Map<string, any>,
+): Promise<any[]> => {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const page = Number(query.page) || 1;
-  const limit = Number(query.limit) || 20;
-  const skip = (page - 1) * limit;
+  const accIds = [...accById.keys()];
 
-  const accommodations = await Accommodation.find({
-    host: hostId,
-    isDeleted: false,
-  });
-  const accIds = accommodations.map((a) => a._id);
-  const accById = new Map(accommodations.map((a) => [String(a._id), a]));
-
-  // ── recommended_schedule ───────────────────────────────────────────────────
   // Only accommodations with an ACCEPTED PRIMARY cleaner qualify (we show that
   // cleaner on the card). For each, find iCal "turnovers": the free window
   // between one guest's checkout and the next guest's check-in.
@@ -546,6 +538,27 @@ const getHostDashboard = async (
       new Date(a.recommendedDate).getTime() -
       new Date(b.recommendedDate).getTime(),
   );
+
+  return recommendations;
+};
+
+const getHostDashboard = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => {
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 20;
+  const skip = (page - 1) * limit;
+
+  const accommodations = await Accommodation.find({
+    host: hostId,
+    isDeleted: false,
+  });
+  const accIds = accommodations.map((a) => a._id);
+  const accById = new Map(accommodations.map((a) => [String(a._id), a]));
+
+  // ── recommended_schedule (top few for the home cards) ───────────────────────
+  const recommendations = await buildRecommendations(hostId, accById);
   const recommended_schedule = recommendations.slice(0, RECOMMENDATION_LIMIT);
 
   // ── to_do: unified activity feed (newest first, paginated) ──────────────────
@@ -608,10 +621,38 @@ const getHostDashboard = async (
 
   return {
     recommended_schedule,
+    recommended_total: recommendations.length,
     to_do: {
       data,
       meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
     },
+  };
+};
+
+// ─── Recommended schedule: full paginated list ("see all" page) ───────────────
+
+const getRecommendedSchedules = async (
+  hostId: string,
+  query: Record<string, unknown>,
+) => {
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  const accommodations = await Accommodation.find({
+    host: hostId,
+    isDeleted: false,
+  });
+  const accById = new Map(accommodations.map((a) => [String(a._id), a]));
+
+  const recommendations = await buildRecommendations(hostId, accById);
+
+  const total = recommendations.length;
+  const data = recommendations.slice(skip, skip + limit);
+
+  return {
+    data,
+    meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
   };
 };
 
@@ -809,6 +850,7 @@ export const AccommodationService = {
   getHousingAccommodations,
   getPlanningAccommodations,
   getHostDashboard,
+  getRecommendedSchedules,
   getAccommodationById,
   getAccommodationForCleaner,
   updateAccommodation,
