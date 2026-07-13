@@ -381,13 +381,26 @@ const refundPayment = async (paymentId: string, reason?: string) => {
 };
 
 // ─── Listings ─────────────────────────────────────────────────────────────────
+// aggregate() does NOT auto-cast string ids to ObjectId the way find() does,
+// so mirror the filter with the id fields coerced before using it in a pipeline.
+const toAggMatch = (filter: any) => {
+  const match: any = { ...filter };
+  if (typeof match.cleaner === "string") {
+    match.cleaner = new Types.ObjectId(match.cleaner);
+  }
+  if (typeof match.host === "string") {
+    match.host = new Types.ObjectId(match.host);
+  }
+  return match;
+};
+
 const buildList = async (filter: any, query: Record<string, unknown>) => {
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 10;
   const skip = (page - 1) * limit;
   if (query.status) filter.status = query.status;
 
-  const [data, total] = await Promise.all([
+  const [data, total, summaryAgg] = await Promise.all([
     Payment.find(filter)
       .populate("host", "firstName lastName name email")
       .populate("cleaner", "firstName lastName name email")
@@ -396,9 +409,28 @@ const buildList = async (filter: any, query: Record<string, unknown>) => {
       .skip(skip)
       .limit(limit),
     Payment.countDocuments(filter),
+    // Count + total across ALL matching payments (not just this page) so the
+    // summary cards reflect the whole dataset, computed on the DB side.
+    Payment.aggregate([
+      { $match: toAggMatch(filter) },
+      { $group: { _id: null, totalAmount: { $sum: "$amount" }, count: { $sum: 1 } } },
+    ]),
   ]);
 
-  return { data, meta: { page, limit, total, totalPage: Math.ceil(total / limit) } };
+  const sumCents = summaryAgg[0]?.totalAmount || 0;
+  const count = summaryAgg[0]?.count || 0;
+  const summary = {
+    count,
+    totalAmount: toUnits(sumCents),
+    averageAmount: count ? toUnits(Math.round(sumCents / count)) : 0,
+    currency: CURRENCY,
+  };
+
+  return {
+    data,
+    meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
+    summary,
+  };
 };
 
 const listAllPayments = (query: Record<string, unknown>) => buildList({}, query);
