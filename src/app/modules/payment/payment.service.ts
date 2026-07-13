@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Types } from "mongoose";
 import { Payment } from "./payment.model";
 import { stripe, PINNED_API_VERSION } from "../../utilities/stripe";
 import config from "../../config";
@@ -314,6 +315,7 @@ const releaseForSchedule = async (scheduleId: string) => {
 
   payment.status = "released";
   payment.stripeTransferId = transfer.id;
+  payment.releasedAt = new Date();
   await payment.save();
 
   await CleaningSchedule.findByIdAndUpdate(scheduleId, {
@@ -410,6 +412,205 @@ const listMyPayments = (
   return buildList(filter, query);
 };
 
+// ─── Revenue dashboard (host = spend, cleaner = earnings) ─────────────────────
+// A transaction only counts as revenue once the payment is "released" and the
+// funds have actually reached the cleaner's account. "Upcoming" is money still
+// held in escrow (paid_held) that will become revenue on release.
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const toUnits = (cents: number) => Math.round((cents || 0)) / 100;
+
+const getRevenue = async (
+  userId: string,
+  role: string,
+  query: Record<string, unknown>,
+) => {
+  const isCleaner = role === "cleaner";
+  // Cleaner sees their payout; host sees what they were charged.
+  const amountField = isCleaner ? "$cleanerAmount" : "$amount";
+  const base: Record<string, unknown> = isCleaner
+    ? { cleaner: new Types.ObjectId(userId) }
+    : { host: new Types.ObjectId(userId) };
+
+  const now = new Date();
+  const year = query.year ? Number(query.year) : undefined;
+  const month = query.month ? Number(query.month) : undefined; // 1-12
+
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // The month whose total powers the "Revenue this month" card.
+  const selYear = year ?? now.getFullYear();
+  const selMonth = month ?? now.getMonth() + 1;
+  const monthStart = new Date(selYear, selMonth - 1, 1);
+  const monthEnd = new Date(selYear, selMonth, 1);
+
+  // Fall back to updatedAt for payments released before releasedAt existed.
+  const revAtStage = {
+    $addFields: { revAt: { $ifNull: ["$releasedAt", "$updatedAt"] } },
+  };
+
+  // ── "This month" released revenue + upcoming (held) funds ──
+  const [monthAgg, upcomingAgg] = await Promise.all([
+    Payment.aggregate([
+      { $match: { ...base, status: "released" } },
+      revAtStage,
+      { $match: { revAt: { $gte: monthStart, $lt: monthEnd } } },
+      { $group: { _id: null, total: { $sum: amountField } } },
+    ]),
+    Payment.aggregate([
+      { $match: { ...base, status: "paid_held" } },
+      { $group: { _id: null, total: { $sum: amountField } } },
+    ]),
+  ]);
+
+  // ── Monthly bar graph ──
+  // With a year filter → Jan–Dec of that year; otherwise the trailing 8 months.
+  let graphStart: Date;
+  let graphEnd: Date;
+  if (year) {
+    graphStart = new Date(year, 0, 1);
+    graphEnd = new Date(year + 1, 0, 1);
+  } else {
+    graphStart = new Date(now.getFullYear(), now.getMonth() - 7, 1);
+    graphEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+
+  const graphAgg = await Payment.aggregate([
+    { $match: { ...base, status: "released" } },
+    revAtStage,
+    { $match: { revAt: { $gte: graphStart, $lt: graphEnd } } },
+    {
+      $group: {
+        _id: { y: { $year: "$revAt" }, m: { $month: "$revAt" } },
+        total: { $sum: amountField },
+      },
+    },
+  ]);
+
+  const bucketMap = new Map<string, number>();
+  for (const g of graphAgg) {
+    bucketMap.set(`${g._id.y}-${g._id.m}`, g.total);
+  }
+
+  const graph: { year: number; month: number; label: string; total: number }[] = [];
+  const cursor = new Date(graphStart);
+  while (cursor < graphEnd) {
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth() + 1;
+    graph.push({
+      year: y,
+      month: m,
+      label: MONTH_LABELS[cursor.getMonth()],
+      total: toUnits(bucketMap.get(`${y}-${m}`) || 0),
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  // ── Recent transactions (released only) with pagination ──
+  const txFilter = { ...base, status: "released" };
+  const [txDocs, total] = await Promise.all([
+    Payment.find(txFilter)
+      .populate("accommodation", "name address city zipCode photos")
+      .populate({
+        path: "schedule",
+        select: "date checkInTime checkOutTime status",
+      })
+      .sort({ releasedAt: -1, updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Payment.countDocuments(txFilter),
+  ]);
+
+  const transactions = txDocs.map((p: any) => ({
+    _id: String(p._id),
+    amount: toUnits(isCleaner ? p.cleanerAmount : p.amount),
+    currency: p.currency,
+    status: p.status,
+    scheduleStatus: p.schedule?.status ?? null,
+    date: p.schedule?.date ?? null,
+    checkInTime: p.schedule?.checkInTime ?? null,
+    checkOutTime: p.schedule?.checkOutTime ?? null,
+    accommodation: p.accommodation
+      ? {
+          _id: String(p.accommodation._id),
+          name: p.accommodation.name,
+          city: p.accommodation.city,
+          address: p.accommodation.address,
+          photo: p.accommodation.photos?.[0] ?? null,
+        }
+      : null,
+    releasedAt: p.releasedAt ?? p.updatedAt,
+  }));
+
+  return {
+    currency: CURRENCY,
+    thisMonth: {
+      year: selYear,
+      month: selMonth,
+      revenue: toUnits(monthAgg[0]?.total || 0),
+    },
+    upcoming: toUnits(upcomingAgg[0]?.total || 0),
+    graph,
+    transactions,
+    meta: { page, limit, total, totalPage: Math.ceil(total / limit) },
+  };
+};
+
+// ─── Single transaction detail (accommodation + schedule + timing) ────────────
+const getTransactionDetail = async (
+  userId: string,
+  role: string,
+  paymentId: string,
+) => {
+  const isCleaner = role === "cleaner";
+  const scope: Record<string, unknown> =
+    role === "admin"
+      ? {}
+      : isCleaner
+        ? { cleaner: userId }
+        : { host: userId };
+
+  const payment = await Payment.findOne({ _id: paymentId, ...scope })
+    .populate(
+      "accommodation",
+      "name address city zipCode photos accommodationType numberOfRooms surface",
+    )
+    .populate({
+      path: "schedule",
+      select:
+        "date checkInTime checkOutTime status paymentStatus notes proofNotes proofPhotos completedAt",
+    })
+    .populate("host", "firstName lastName name email phone profileImage")
+    .populate("cleaner", "firstName lastName name email phone profileImage")
+    .lean();
+
+  if (!payment) throw new AppError(404, "Transaction not found");
+
+  const p = payment as any;
+  return {
+    _id: String(p._id),
+    status: p.status,
+    currency: p.currency,
+    amount: toUnits(p.amount),
+    platformFee: toUnits(p.platformFee),
+    cleanerAmount: toUnits(p.cleanerAmount),
+    // The amount that matters to the viewer.
+    yourAmount: toUnits(isCleaner ? p.cleanerAmount : p.amount),
+    releasedAt: p.releasedAt ?? null,
+    createdAt: p.createdAt,
+    accommodation: p.accommodation ?? null,
+    schedule: p.schedule ?? null,
+    host: p.host ?? null,
+    cleaner: p.cleaner ?? null,
+  };
+};
+
 export const PaymentService = {
   createConnectAccount,
   refreshConnectStatus,
@@ -419,4 +620,6 @@ export const PaymentService = {
   refundPayment,
   listAllPayments,
   listMyPayments,
+  getRevenue,
+  getTransactionDetail,
 };

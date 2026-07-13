@@ -38,6 +38,8 @@ const paymentSchema = new Schema<IPayment>(
       default: "pending",
       index: true,
     },
+
+    releasedAt: { type: Date, index: true },
   },
   { timestamps: true },
 );

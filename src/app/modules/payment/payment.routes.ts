@@ -40,6 +40,21 @@ router.post(
 // GET /api/v1/payment/my — host/cleaner: my payments (?status&page&limit)
 router.get("/my", auth("host", "cleaner"), PaymentController.listMyPayments);
 
+// GET /api/v1/payment/revenue — host/cleaner: revenue summary + graph + txns
+// (?year&month&page&limit)
+router.get(
+  "/revenue",
+  auth("host", "cleaner"),
+  PaymentController.getRevenue,
+);
+
+// GET /api/v1/payment/transaction/:id — host/cleaner/admin: one transaction
+router.get(
+  "/transaction/:id",
+  auth("admin", "host", "cleaner"),
+  PaymentController.getTransactionDetail,
+);
+
 // GET /api/v1/payment — admin: all payments
 router.get("/", auth("admin"), PaymentController.listAllPayments);
 

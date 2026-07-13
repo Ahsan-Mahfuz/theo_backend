@@ -75,6 +75,38 @@ const listAllPayments = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+// ─── Revenue dashboard ────────────────────────────────────────────────────────
+
+// GET /api/v1/payment/revenue — this-month total + graph + paginated transactions
+const getRevenue = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const role = (req as any).user.role;
+  const result = await PaymentService.getRevenue(userId, role, req.query as any);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Revenue retrieved successfully",
+    data: result,
+  });
+});
+
+// GET /api/v1/payment/transaction/:id — full detail for one transaction
+const getTransactionDetail = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const role = (req as any).user.role;
+  const result = await PaymentService.getTransactionDetail(
+    userId,
+    role,
+    req.params.id,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Transaction retrieved successfully",
+    data: result,
+  });
+});
+
 const refundPayment = catchAsync(async (req: Request, res: Response) => {
   const result = await PaymentService.refundPayment(
     req.params.id,
@@ -123,6 +155,8 @@ export const PaymentController = {
   payForSchedule,
   listMyPayments,
   listAllPayments,
+  getRevenue,
+  getTransactionDetail,
   refundPayment,
   retryRelease,
   webhook,

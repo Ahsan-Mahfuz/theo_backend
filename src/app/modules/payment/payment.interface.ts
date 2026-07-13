@@ -25,6 +25,8 @@ export interface IPayment extends Document {
 
   status: TPaymentStatus;
 
+  releasedAt?: Date; // when funds were transferred to the cleaner
+
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,0 +1,142 @@
+{
+  "info": {
+    "name": "Gestlio - Revenue API",
+    "description": "Cleaner/host revenue dashboard: monthly revenue + graph + paginated transactions, and single transaction detail. Set the collection variables baseUrl and token before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "transactionId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Revenue (this month + graph + transactions)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payment/revenue?year=2026&month=7&page=1&limit=8",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "payment",
+            "revenue"
+          ],
+          "query": [
+            {
+              "key": "year",
+              "value": "2026",
+              "description": "Optional. When set, the graph shows Jan-Dec of this year; otherwise the trailing 8 months."
+            },
+            {
+              "key": "month",
+              "value": "7",
+              "description": "Optional (1-12). The month whose total powers the 'Revenue this month' card. Defaults to the current month."
+            },
+            {
+              "key": "page",
+              "value": "1",
+              "description": "Optional. Transactions page (default 1)."
+            },
+            {
+              "key": "limit",
+              "value": "8",
+              "description": "Optional. Transactions per page (default 10)."
+            }
+          ]
+        },
+        "description": "Auth: host or cleaner. Returns { currency, thisMonth {year,month,revenue}, upcoming, graph[], transactions[], meta }. Amounts are in currency units (not cents). A cleaner sees their payout; a host sees the total charged. Transactions are released payments only."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Revenue (current month, defaults)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payment/revenue",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "payment",
+            "revenue"
+          ]
+        },
+        "description": "Same endpoint with no query params: defaults to the current month and the trailing-8-months graph, page 1, limit 10."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Transaction Detail",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/payment/transaction/{{transactionId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "payment",
+            "transaction",
+            "{{transactionId}}"
+          ]
+        },
+        "description": "Auth: admin, host or cleaner. Returns the full payment record for one transaction: accommodation (name, address, type, photos), schedule (date, checkInTime, checkOutTime, status, notes), host, cleaner, and the amount breakdown (amount / platformFee / cleanerAmount / yourAmount). Set the transactionId variable to a payment _id (e.g. from the revenue transactions list)."
+      },
+      "response": []
+    }
+  ]
+}
