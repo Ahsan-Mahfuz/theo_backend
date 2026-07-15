@@ -34,6 +34,9 @@ export interface ICleaningSchedule extends Document {
   status: TScheduleStatus;
   paymentStatus: TPaymentStatus;
 
+  // set when the cleaner refuses this schedule (host then re-schedules another cleaner)
+  refusedAt?: Date;
+
   // proof of completion (from the cleaner's checklist screen)
   proofPhotos: string[];
   proofNotes?: string;

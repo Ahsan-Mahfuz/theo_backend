@@ -187,6 +187,8 @@ const getMonthCalendar = async (
       paymentStatus: s.paymentStatus,
       booking: s.booking,
       cleaner: s.cleaner,
+      notes: s.notes,
+      refusedAt: s.refusedAt,
     })),
   };
 };

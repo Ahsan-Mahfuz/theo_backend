@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CleaningSchedule } from "./schedule.model";
-import { Booking } from "../calendar/calendar.model";
 import { Accommodation } from "../accommodation/accommodation.model";
 import { User } from "../user/user.model";
 import { AssignmentService } from "../assignment/assignment.service";
@@ -137,21 +136,6 @@ const findSameDaySchedule = async (
   return CleaningSchedule.findOne(filter);
 };
 
-// Is the given day occupied by a guest booking? A booking [startDate, endDate)
-// keeps the guest in the unit on every night from startDate up to — but not
-// including — the checkout day (endDate). The checkout day is intentionally
-// free: that's when the cleaning is meant to happen. So a day D is occupied iff
-// startDate <= D < endDate.
-const findBookingConflict = async (accommodationId: string, date: Date) => {
-  const { start, end } = dayRange(date);
-  return Booking.findOne({
-    accommodation: accommodationId,
-    isCancelled: false,
-    startDate: { $lte: end }, // booking started on or before this day …
-    endDate: { $gt: start }, // … and the guest hasn't checked out yet
-  });
-};
-
 // ─── Host: create a schedule (Proceed to Schedule) ────────────────────────────
 const createSchedule = async (
   hostId: string,
@@ -198,18 +182,9 @@ const createSchedule = async (
     );
   }
 
-  // Block scheduling on a day a guest is still occupying the unit. Cleanings can
-  // only be booked once the guest has checked out (the checkout day is free).
-  const bookingConflict = await findBookingConflict(
-    accommodationId,
-    new Date(payload.date),
-  );
-  if (bookingConflict) {
-    throw new AppError(
-      409,
-      "This date is occupied by a guest booking. Schedule the cleaning for the checkout day or a free date.",
-    );
-  }
+  // Note: scheduling on a guest-occupied day is allowed — the host may want to
+  // assign a cleaner while the guest is still in the unit (e.g. mid-stay clean).
+  // The same-day duplicate guard above is the only date restriction.
 
   const schedule = await CleaningSchedule.create({
     accommodation: accommodationId,
@@ -323,16 +298,7 @@ const updateSchedule = async (
           "You already created a schedule on this date. Please edit the schedule if you want.",
         );
       }
-      const bookingConflict = await findBookingConflict(
-        accommodationId,
-        newDate,
-      );
-      if (bookingConflict) {
-        throw new AppError(
-          409,
-          "This date is occupied by a guest booking. Schedule the cleaning for the checkout day or a free date.",
-        );
-      }
+      // Moving a cleaning onto a guest-occupied day is allowed (see createSchedule).
     }
     schedule.date = newDate;
   }
@@ -433,6 +399,7 @@ const respondToSchedule = async (
     });
   } else {
     schedule.status = "refused";
+    schedule.refusedAt = new Date();
     await schedule.save();
 
     // free the accommodation again

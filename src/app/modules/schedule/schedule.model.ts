@@ -57,6 +57,9 @@ const scheduleSchema = new Schema<ICleaningSchedule>(
       index: true,
     },
 
+    // set when the cleaner refuses this schedule
+    refusedAt: { type: Date },
+
     proofPhotos: [{ type: String }],
     proofNotes: { type: String },
     proofSubmittedAt: { type: Date },
