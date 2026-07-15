@@ -34,7 +34,7 @@ export default {
   stripe_price_id: process.env.STRIPE_PRICE_ID,
   stripe_publishable_key: process.env.STRIPE_PUBLISHABLE_KEY,
   platform_fee_percent: Number(process.env.PLATFORM_FEE_PERCENT) || 5,
-  platform_currency: process.env.PLATFORM_CURRENCY || "usd",
+  platform_currency: process.env.PLATFORM_CURRENCY || "eur",
   stripe_connect_return_url: process.env.STRIPE_CONNECT_RETURN_URL,
   stripe_connect_refresh_url: process.env.STRIPE_CONNECT_REFRESH_URL,
 

@@ -7,14 +7,15 @@ import { Payment } from "../payment/payment.model";
 import { SupportTicket } from "../support/support.model";
 import AppError from "../../error/appError";
 import { NotificationService } from "../notification/notification.service";
+import { TimezoneUtils } from "../../utilities/timezone.utils";
 
 const toMoney = (cents: number) => Math.round((cents || 0)) / 100;
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const getDashboard = async (query: Record<string, unknown>) => {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Month/day boundaries in the viewer (admin)'s timezone.
+  const monthStart = TimezoneUtils.monthRange().start;
+  const todayStart = TimezoneUtils.todayRange().start;
 
   // chart range: "this_month" (default) or "all"
   const range = (query.range as string) || "this_month";

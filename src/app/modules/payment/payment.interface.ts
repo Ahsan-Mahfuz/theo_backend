@@ -14,7 +14,7 @@ export interface IPayment extends Document {
   accommodation: Types.ObjectId;
 
   amount: number; // total charged, in the smallest currency unit (cents)
-  currency: string; // e.g. "usd"
+  currency: string; // e.g. "eur"
   platformFee: number; // platform commission, in cents
   cleanerAmount: number; // amount transferred to the cleaner, in cents
 

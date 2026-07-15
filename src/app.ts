@@ -2,6 +2,7 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import notFound from "./app/middleware/notFoundRoute";
+import { timezoneContext } from "./app/middleware/timezone";
 import router from "./app/routes";
 import errorMiddleware from "./app/middleware/globalErrorHandler";
 import { PaymentController } from "./app/modules/payment/payment.controller";
@@ -28,6 +29,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use("/uploads", express.static("uploads"));
+// Capture the viewer's timezone (x-timezone header) into request-scoped context
+// before any route runs, so responses render dates in the viewer's local zone.
+app.use(timezoneContext);
 app.use("/api/v1", router);
 
 app.get("/", (_req: Request, res: Response) => {

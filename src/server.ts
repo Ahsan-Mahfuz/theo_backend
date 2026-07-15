@@ -1,3 +1,9 @@
+// Pin the server process to UTC so any date math that isn't explicitly
+// timezone-aware is computed in a deterministic zone (never the host's local
+// timezone, which used to leak Bangladesh time into day grouping/labels).
+// Per-user display timezone is applied separately via the x-timezone header.
+process.env.TZ = "UTC";
+
 import mongoose from "mongoose";
 import { createServer } from "http";
 import config from "./app/config";

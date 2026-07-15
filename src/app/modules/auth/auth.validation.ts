@@ -76,6 +76,15 @@ const toStringArray = (v: unknown) => {
 
 const toNum = (v: unknown) => (typeof v === "string" && v !== "" ? Number(v) : v);
 
+// multipart sends booleans as the strings "true"/"false"; coerce to real bool
+const toBool = (v: unknown) => {
+  if (typeof v === "string") {
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return v;
+};
+
 export const updateProfileSchema = z.object({
   firstName: z.string().min(2).optional(),
   lastName: z.string().min(2).optional(),
@@ -102,6 +111,8 @@ export const updateProfileSchema = z.object({
   availability: z.enum(["full_time", "part_time", "flexible"]).optional(),
   // push registration
   playerId: z.string().optional(),
+  // active status — cleaner can go inactive so hosts stop seeing them in search
+  isActive: z.preprocess(toBool, z.boolean()).optional(),
 });
 
 export const deleteAccountSchema = z.object({

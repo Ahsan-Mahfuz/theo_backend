@@ -7,6 +7,7 @@ import { CleanerAssignment } from "../assignment/assignment.model";
 import { Payment } from "../payment/payment.model";
 import { CleaningSchedule } from "../schedule/schedule.model";
 import { Booking, CalendarConnection } from "../calendar/calendar.model";
+import { TimezoneUtils } from "../../utilities/timezone.utils";
 
 // Derive the cleaner's response to the latest schedule (what the host sees):
 //   pending  → schedule sent, cleaner hasn't responded yet
@@ -376,19 +377,11 @@ const RECOMMENDATION_LIMIT = 3;
 const CLEANER_CARD_FIELDS = "firstName lastName name profileImage";
 const ACC_CARD_FIELDS = "name address city photos accommodationType";
 
-// "HH:mm" (server local time) from a Date
-const hhmm = (d: Date): string =>
-  `${String(d.getHours()).padStart(2, "0")}:${String(
-    d.getMinutes(),
-  ).padStart(2, "0")}`;
+// "HH:mm" in the viewer's timezone
+const hhmm = (d: Date): string => TimezoneUtils.hhmm(d);
 
-// "YYYY-MM-DD" day key (server local time)
-const dayKey = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+// "YYYY-MM-DD" day key in the viewer's timezone
+const dayKey = (d: Date): string => TimezoneUtils.dayKey(d);
 
 // Host-facing label for a cleaning schedule's current status
 const scheduleEventLabel = (status: string): string => {
@@ -432,8 +425,7 @@ const buildRecommendations = async (
   hostId: string,
   accById: Map<string, any>,
 ): Promise<any[]> => {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = TimezoneUtils.todayRange().start;
 
   const accIds = [...accById.keys()];
 

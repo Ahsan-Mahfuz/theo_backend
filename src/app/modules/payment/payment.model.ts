@@ -23,7 +23,7 @@ const paymentSchema = new Schema<IPayment>(
     },
 
     amount: { type: Number, required: true },
-    currency: { type: String, default: "usd" },
+    currency: { type: String, default: "eur" },
     platformFee: { type: Number, required: true },
     cleanerAmount: { type: Number, required: true },
 

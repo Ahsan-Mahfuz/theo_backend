@@ -72,6 +72,7 @@ export interface IUpdateProfile {
   licenseNumber?: string;
   availability?: "full_time" | "part_time" | "flexible";
   playerId?: string;
+  isActive?: boolean;
 }
 
 export interface IDeleteAccount {

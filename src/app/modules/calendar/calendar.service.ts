@@ -5,6 +5,7 @@ import { Accommodation } from "../accommodation/accommodation.model";
 import { CleaningSchedule } from "../schedule/schedule.model";
 import { TPlatform } from "./calendar.interface";
 import AppError from "../../error/appError";
+import { TimezoneUtils } from "../../utilities/timezone.utils";
 
 // ─── helpers ────────────────────────────────────────────────────────────────────
 
@@ -145,12 +146,13 @@ const getMonthCalendar = async (
 ) => {
   await ensureOwnership(hostId, accommodationId);
 
-  const now = new Date();
-  const year = Number(query.year) || now.getFullYear();
-  const month = Number(query.month) || now.getMonth() + 1; // 1-12
+  const current = TimezoneUtils.currentYearMonth();
+  const year = Number(query.year) || current.year;
+  const month = Number(query.month) || current.month; // 1-12
 
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1); // exclusive (1st of next month)
+  // Month boundaries as UTC instants, computed in the viewer's timezone.
+  const { start: monthStart, endExclusive: monthEnd } =
+    TimezoneUtils.monthBoundsExclusive(year, month);
 
   // Bookings overlapping the month: start before month-end AND end at/after month-start.
   const bookings = await Booking.find({
@@ -201,12 +203,13 @@ const getList = async (
 ) => {
   await ensureOwnership(hostId, accommodationId);
 
-  const now = new Date();
-  const year = Number(query.year) || now.getFullYear();
-  const month = Number(query.month) || now.getMonth() + 1;
+  const current = TimezoneUtils.currentYearMonth();
+  const year = Number(query.year) || current.year;
+  const month = Number(query.month) || current.month;
 
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
+  // Month boundaries as UTC instants, computed in the viewer's timezone.
+  const { start: monthStart, endExclusive: monthEnd } =
+    TimezoneUtils.monthBoundsExclusive(year, month);
 
   const bookings = await Booking.find({
     accommodation: accommodationId,

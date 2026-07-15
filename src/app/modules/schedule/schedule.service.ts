@@ -8,9 +8,10 @@ import { PaymentService } from "../payment/payment.service";
 import { Payment } from "../payment/payment.model";
 import AppError from "../../error/appError";
 import config from "../../config";
+import { TimezoneUtils } from "../../utilities/timezone.utils";
 
 // Currency the host is charged in (matches the payment module).
-const PAY_CURRENCY = config.platform_currency || "usd";
+const PAY_CURRENCY = config.platform_currency || "eur";
 
 // Estimated duration (in hours) between checkInTime and checkOutTime ("HH:mm")
 const estimationHours = (checkInTime: string, checkOutTime: string): number => {
@@ -21,41 +22,11 @@ const estimationHours = (checkInTime: string, checkOutTime: string): number => {
   return Math.round((minutes / 60) * 10) / 10;
 };
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+// "Wednesday 15 May" — rendered in the viewer's timezone (matches planning UI).
+const dayLabelOf = (date: Date): string => TimezoneUtils.dayLabel(date);
 
-// "Wednesday 15 May" (matches the planning UI)
-const dayLabelOf = (date: Date): string =>
-  `${WEEKDAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`;
-
-// "2024-05-15" key for grouping / calendar dots
-const dayKeyOf = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
+// "2024-05-15" key for grouping / calendar dots — in the viewer's timezone.
+const dayKeyOf = (date: Date): string => TimezoneUtils.dayKey(date);
 
 // Always expose the host's profileImage + phone (null when not set yet).
 // Mongoose drops unset fields after populate, so we backfill them here.
@@ -110,14 +81,9 @@ const cleanerResponseOf = (
   return "accepted";
 };
 
-// Start/end of the calendar day for a given date (used for same-day checks)
-const dayRange = (date: Date) => {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-};
+// Start/end of the calendar day for a given date (used for same-day checks),
+// computed in the viewer's timezone.
+const dayRange = (date: Date) => TimezoneUtils.dayRange(date);
 
 // Is there already an active schedule for this accommodation on this day?
 // Refused / cancelled schedules don't count — the host may re-schedule those.
@@ -171,10 +137,8 @@ const createSchedule = async (
   }
 
   // Block a duplicate schedule for the same accommodation on the same day
-  const existing = await findSameDaySchedule(
-    accommodationId,
-    new Date(payload.date),
-  );
+  const scheduleDate = TimezoneUtils.parseDateInTz(payload.date);
+  const existing = await findSameDaySchedule(accommodationId, scheduleDate);
   if (existing) {
     throw new AppError(
       409,
@@ -192,7 +156,7 @@ const createSchedule = async (
     cleaner: assignment.cleaner,
     assignment: assignment._id,
     booking: payload.bookingId,
-    date: new Date(payload.date),
+    date: scheduleDate,
     checkInTime: payload.checkInTime,
     checkOutTime: payload.checkOutTime,
     notes: payload.notes,
@@ -207,7 +171,7 @@ const createSchedule = async (
   await NotificationService.createNotification({
     user: String(assignment.cleaner),
     title: "New cleaning scheduled",
-    message: `${accommodation.name} is scheduled for ${new Date(payload.date).toDateString()} (${payload.checkInTime}–${payload.checkOutTime}).`,
+    message: `${accommodation.name} is scheduled for ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkInTime}–${payload.checkOutTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id), accommodationId },
   });
@@ -278,7 +242,7 @@ const updateSchedule = async (
   // another schedule. Keeping the same day (e.g. editing only the time/notes)
   // must not trip the duplicate guard against itself.
   if (payload.date) {
-    const newDate = new Date(payload.date);
+    const newDate = TimezoneUtils.parseDateInTz(payload.date);
     const isSameDay =
       dayRange(schedule.date).start.getTime() ===
       dayRange(newDate).start.getTime();
@@ -314,7 +278,7 @@ const updateSchedule = async (
   await NotificationService.createNotification({
     user: String(schedule.cleaner),
     title: "Cleaning schedule updated",
-    message: `The host updated the cleaning for ${accName} — ${schedule.date.toDateString()} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
+    message: `The host updated the cleaning for ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });
@@ -514,10 +478,8 @@ const ACCOMMODATION_CARD_FIELDS =
 const PAID_STATUSES = ["paid_held", "released"];
 
 const getCleanerHome = async (cleanerId: string) => {
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+  // "Today" as seen in the viewer's timezone (UTC instants for the DB query).
+  const { start: startOfToday, end: endOfToday } = TimezoneUtils.todayRange();
 
   // Active = anything the cleaner still has to act on / is working on
   const activeStatuses = [
@@ -587,21 +549,20 @@ const getCleanerPlanning = async (
   cleanerId: string,
   query: Record<string, unknown>,
 ) => {
-  // Range: explicit ?from&to, else a whole month (?month=YYYY-MM), else current month
+  // Range: explicit ?from&to, else a whole month (?month=YYYY-MM), else current
+  // month — all boundaries computed in the viewer's timezone.
   let from: Date;
   let to: Date;
 
   if (query.from && query.to) {
-    from = new Date(String(query.from));
-    from.setHours(0, 0, 0, 0);
-    to = new Date(String(query.to));
-    to.setHours(23, 59, 59, 999);
+    from = TimezoneUtils.startOfDay(String(query.from));
+    to = TimezoneUtils.endOfDay(String(query.to));
   } else {
-    const base = query.month
-      ? new Date(`${String(query.month)}-01T00:00:00`)
-      : new Date();
-    from = new Date(base.getFullYear(), base.getMonth(), 1, 0, 0, 0, 0);
-    to = new Date(base.getFullYear(), base.getMonth() + 1, 0, 23, 59, 59, 999);
+    const range = TimezoneUtils.monthRange(
+      query.month ? String(query.month) : undefined,
+    );
+    from = range.start;
+    to = range.end;
   }
 
   const filter: any = {

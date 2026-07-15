@@ -10,7 +10,7 @@ import { Accommodation } from "../accommodation/accommodation.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
 import { NotificationService } from "../notification/notification.service";
 
-const CURRENCY = config.platform_currency || "usd";
+const CURRENCY = config.platform_currency || "eur";
 const FEE_PERCENT = config.platform_fee_percent || 5;
 
 const returnUrl =

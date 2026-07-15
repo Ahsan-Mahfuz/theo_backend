@@ -372,6 +372,7 @@ const updateMyProfile = async (userId: string, payload: IUpdateProfile) => {
   if (payload.availability !== undefined)
     updateData.availability = payload.availability;
   if (payload.playerId !== undefined) updateData.playerId = payload.playerId;
+  if (payload.isActive !== undefined) updateData.isActive = payload.isActive;
 
   // SIRET submission marks the professional status as verified (KYC level 1)
   if (payload.siretNumber !== undefined) {
