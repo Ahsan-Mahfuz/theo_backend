@@ -28,13 +28,16 @@ export const auth = (...roles: TRole[]) => {
         );
       }
 
-      const user = await User.findById(decoded.userId).select("isActive isDeleted role");
+      const user = await User.findById(decoded.userId).select("isBlocked isDeleted role");
       if (!user)
         return next(new AppError(401, "Unauthorized – user no longer exists"));
       if (user.isDeleted)
         return next(new AppError(403, "Your account has been deleted"));
-      if (!user.isActive)
-        return next(new AppError(403, "Your account has been deactivated or blocked"));
+      // Only an admin block locks a user out. `isActive` is the user's own
+      // profile-visibility switch — a cleaner who hides their profile must still
+      // be able to use the app (and to turn it back on, which needs this route).
+      if (user.isBlocked)
+        return next(new AppError(403, "Your account has been blocked"));
 
       if (roles.length > 0 && (!decoded.role || !roles.includes(decoded.role))) {
         return next(

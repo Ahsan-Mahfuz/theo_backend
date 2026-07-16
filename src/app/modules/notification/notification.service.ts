@@ -71,7 +71,7 @@ const createNotification = async (payload: ICreateNotification) => {
 const notifyAdmins = async (payload: Omit<ICreateNotification, "user">) => {
   const admins = await User.find({
     role: "admin",
-    isActive: true,
+    isBlocked: { $ne: true },
     isDeleted: false,
   }).select("_id");
 

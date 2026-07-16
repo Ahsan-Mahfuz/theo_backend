@@ -287,6 +287,48 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
 };
 
 // ─── Release funds to the cleaner (called from completeTask) ──────────────────
+// ─── Cancel an in-flight (still unpaid) payment for a schedule ────────────────
+/**
+ * Kill any "pending" payment attached to a schedule the host is deleting.
+ *
+ * Opening the payment sheet creates a live PaymentIntent while the schedule is
+ * still `unpaid`. If the host abandons the sheet, deletes the cleaning, and then
+ * confirms that stale sheet, Stripe would capture money for a job that no longer
+ * exists — funds that can never be released or refunded. Cancelling the intent
+ * makes that confirmation fail instead.
+ *
+ * Returns false when an intent could NOT be cancelled: it has already reached a
+ * terminal state on Stripe's side (most likely it just succeeded and the webhook
+ * is about to fund the escrow). The caller must then leave the schedule alone.
+ */
+const cancelPendingForSchedule = async (scheduleId: string): Promise<boolean> => {
+  const pending = await Payment.find({ schedule: scheduleId, status: "pending" });
+  let allCancelled = true;
+
+  for (const payment of pending) {
+    if (payment.stripePaymentIntentId) {
+      try {
+        await stripe.paymentIntents.cancel(payment.stripePaymentIntentId);
+      } catch (err) {
+        console.error(
+          "⚠️ PaymentIntent cancel failed:",
+          (err as Error).message,
+        );
+        allCancelled = false;
+        continue;
+      }
+    }
+    // Only marked dead once the intent is provably unusable (cancelled here, or
+    // never created) — never race the webhook into the wrong status.
+    await Payment.updateOne(
+      { _id: payment._id, status: "pending" },
+      { status: "failed" },
+    );
+  }
+
+  return allCancelled;
+};
+
 const releaseForSchedule = async (scheduleId: string) => {
   const payment = await Payment.findOne({
     schedule: scheduleId,
@@ -647,6 +689,7 @@ export const PaymentService = {
   createConnectAccount,
   refreshConnectStatus,
   payForSchedule,
+  cancelPendingForSchedule,
   handleWebhook,
   releaseForSchedule,
   refundPayment,

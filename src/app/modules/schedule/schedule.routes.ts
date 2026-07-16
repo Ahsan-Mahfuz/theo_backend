@@ -48,7 +48,7 @@ router.patch(
   ScheduleController.updateSchedule,
 );
 
-// DELETE /api/v1/schedule/:id — host deletes a schedule (only before cleaner accepts)
+// DELETE /api/v1/schedule/:id — host deletes a schedule (any time before paying)
 router.delete("/:id", auth("admin", "host"), ScheduleController.deleteSchedule);
 
 // ─── Cleaner ──────────────────────────────────────────────────────────────────

@@ -68,6 +68,7 @@ const PROFILE_FIELDS: string[] = [
   "payoutsEnabled",
   // status
   "isActive",
+  "isBlocked",
   "isVerified",
   "isDeleted",
 ];
@@ -232,6 +233,11 @@ const signIn = async (payload: ISignIn) => {
   const user = await User.findOne({ email: payload.email }).select("+password");
   if (!user) throw new AppError(401, "Invalid email or password");
   if (user.isDeleted) throw new AppError(403, "This account has been deleted.");
+  // Tell a blocked user at sign-in rather than handing them a token that 403s on
+  // every call. Note this is isBlocked, never isActive — hiding your profile
+  // must not cost you your login.
+  if (user.isBlocked)
+    throw new AppError(403, "Your account has been blocked. Please contact support.");
   if (!user.isVerified)
     throw new AppError(
       403,
@@ -372,6 +378,9 @@ const updateMyProfile = async (userId: string, payload: IUpdateProfile) => {
   if (payload.availability !== undefined)
     updateData.availability = payload.availability;
   if (payload.playerId !== undefined) updateData.playerId = payload.playerId;
+  // The user's own profile-visibility switch (a cleaner hiding themselves from
+  // the host's search). Blocking lives on isBlocked and is admin-only — never
+  // settable from here, or a blocked user could unblock themselves.
   if (payload.isActive !== undefined) updateData.isActive = payload.isActive;
 
   // SIRET submission marks the professional status as verified (KYC level 1)

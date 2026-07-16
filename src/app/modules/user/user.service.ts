@@ -8,7 +8,9 @@ const getAllUsers = async (query: Record<string, unknown>) => {
   const skip = (page - 1) * limit;
   const role = (query.role as string) || "host"; // default: hosts
 
-  const filter: any = { role, isActive: true };
+  // Admin-only listing, so it must show everyone — including cleaners who hid
+  // their profile from hosts (isActive: false). Only deleted users drop out.
+  const filter: any = { role, isDeleted: { $ne: true } };
 
   // ─── Search: name, email, phone ───────────────────────────────────────────
   if (query.search) {

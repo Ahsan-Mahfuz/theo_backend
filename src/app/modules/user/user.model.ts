@@ -57,7 +57,13 @@ const userSchema = new Schema<IUser>(
     stripeOnboardingComplete: { type: Boolean, default: false },
     payoutsEnabled: { type: Boolean, default: false },
 
+    // The user's OWN visibility switch, not a block. A cleaner turns this off to
+    // keep their profile out of the host's "Find a housekeeper" search; they can
+    // still sign in and use every feature. Never gate auth on this.
     isActive: { type: Boolean, default: true },
+    // Set by an admin only (block/unblock). This is the flag that locks a user
+    // out of the API — see the auth middleware.
+    isBlocked: { type: Boolean, default: false, index: true },
     isVerified: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
 

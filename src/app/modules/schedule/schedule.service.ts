@@ -136,8 +136,18 @@ const createSchedule = async (
     );
   }
 
-  // Block a duplicate schedule for the same accommodation on the same day
   const scheduleDate = TimezoneUtils.parseDateInTz(payload.date);
+
+  // A cleaning can't be scheduled on a day that has already gone by — the
+  // cleaner would receive a request they can never act on.
+  if (TimezoneUtils.isPastDay(scheduleDate)) {
+    throw new AppError(
+      400,
+      "You cannot schedule a cleaning on a past date. Please choose today or a future date.",
+    );
+  }
+
+  // Block a duplicate schedule for the same accommodation on the same day
   const existing = await findSameDaySchedule(accommodationId, scheduleDate);
   if (existing) {
     throw new AppError(
@@ -243,6 +253,15 @@ const updateSchedule = async (
   // must not trip the duplicate guard against itself.
   if (payload.date) {
     const newDate = TimezoneUtils.parseDateInTz(payload.date);
+
+    // Same rule as createSchedule: never move a cleaning into the past.
+    if (TimezoneUtils.isPastDay(newDate)) {
+      throw new AppError(
+        400,
+        "You cannot move a cleaning to a past date. Please choose today or a future date.",
+      );
+    }
+
     const isSameDay =
       dayRange(schedule.date).start.getTime() ===
       dayRange(newDate).start.getTime();
@@ -286,7 +305,15 @@ const updateSchedule = async (
   return schedule;
 };
 
-// ─── Host: delete a schedule (only before the cleaner accepts) ────────────────
+// ─── Host: delete a schedule (any time before the host pays) ──────────────────
+// Payment is the point of no return, not the cleaner's acceptance: an accepted
+// but still-unpaid cleaning is one the host booked by mistake and must be able
+// to remove. Deleting frees the day, so the host can re-schedule on that date.
+const DELETABLE_STATUSES = ["scheduled", "accepted", "refused", "cancelled"];
+
+// The cleaner only hears about a deletion if the job was on their plate.
+const CLEANER_AWARE_STATUSES = ["scheduled", "accepted"];
+
 const deleteSchedule = async (hostId: string, scheduleId: string) => {
   const schedule = await CleaningSchedule.findOne({
     _id: scheduleId,
@@ -294,23 +321,38 @@ const deleteSchedule = async (hostId: string, scheduleId: string) => {
   }).populate("accommodation", "name");
   if (!schedule) throw new AppError(404, "Schedule not found");
 
-  // Block deletion once money/work is involved.
+  // Once the escrow is funded the cleaner is committed — deleting would strand
+  // the money, so the host must go through the refund/dispute flow instead.
   if (schedule.paymentStatus !== "unpaid") {
     throw new AppError(
       400,
-      "This schedule has a payment attached and can no longer be deleted.",
+      "You have already paid for this cleaning, so it can no longer be deleted.",
     );
   }
-  if (!["scheduled", "refused", "cancelled"].includes(schedule.status)) {
+  if (!DELETABLE_STATUSES.includes(schedule.status)) {
     throw new AppError(
       400,
-      "The cleaner has already accepted this schedule, so it can no longer be deleted.",
+      "This cleaning is already underway and can no longer be deleted.",
+    );
+  }
+
+  // paymentStatus only flips to paid_held once the webhook lands, so a host who
+  // opened the payment sheet and abandoned it still reads as "unpaid" while a
+  // live PaymentIntent sits on Stripe. Kill it before the schedule disappears,
+  // or confirming that stale sheet would capture money for a deleted job.
+  const cancelled = await PaymentService.cancelPendingForSchedule(
+    String(schedule._id),
+  );
+  if (!cancelled) {
+    throw new AppError(
+      400,
+      "A payment for this cleaning is being processed right now. Please refresh the page and try again in a moment.",
     );
   }
 
   const accommodationId = schedule.accommodation?._id || schedule.accommodation;
   const accName = (schedule.accommodation as any)?.name || "an accommodation";
-  const wasScheduled = schedule.status === "scheduled";
+  const notifyCleaner = CLEANER_AWARE_STATUSES.includes(schedule.status);
 
   await schedule.deleteOne();
 
@@ -319,8 +361,8 @@ const deleteSchedule = async (hostId: string, scheduleId: string) => {
     status: "not_scheduled",
   });
 
-  // only notify the cleaner if they had a pending request waiting
-  if (wasScheduled) {
+  // Tell the cleaner only if they had a request pending or already accepted it.
+  if (notifyCleaner) {
     await NotificationService.createNotification({
       user: String(schedule.cleaner),
       title: "Cleaning schedule cancelled",

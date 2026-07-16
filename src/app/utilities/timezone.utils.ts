@@ -118,6 +118,18 @@ export class TimezoneUtils {
   }
 
   /**
+   * Is this date's calendar day before today, as seen in the viewer's timezone?
+   * A host in France picking "yesterday" must be rejected against the French
+   * calendar day, not the server's UTC one.
+   */
+  static isPastDay(date: Date | string, tz: string = getTimezone()): boolean {
+    return moment
+      .tz(date, tz)
+      .startOf("day")
+      .isBefore(moment.tz(tz).startOf("day"));
+  }
+
+  /**
    * Human date string ("Wed May 15 2024") in the viewer's timezone — replaces
    * server-local Date.toDateString() in notification messages.
    */

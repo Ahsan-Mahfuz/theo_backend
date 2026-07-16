@@ -49,7 +49,8 @@ export interface IUser extends Document {
   stripeOnboardingComplete?: boolean; // cleaner finished Connect onboarding
   payoutsEnabled?: boolean; // cleaner can receive payouts
 
-  isActive: boolean;
+  isActive: boolean; // the user's own profile-visibility switch (not a block)
+  isBlocked: boolean; // admin block — the only flag that locks a user out
   isVerified: boolean; // email verified status
   isDeleted: boolean; // soft delete status
 

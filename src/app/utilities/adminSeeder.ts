@@ -29,8 +29,8 @@ export const seedSuperAdmin = async () => {
         existing.isVerified = true;
         changed = true;
       }
-      if (!existing.isActive) {
-        existing.isActive = true;
+      if (existing.isBlocked) {
+        existing.isBlocked = false;
         changed = true;
       }
       if (changed) {

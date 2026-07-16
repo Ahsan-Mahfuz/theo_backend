@@ -100,7 +100,7 @@ const getHosts = async (query: Record<string, unknown>) => {
 
   const [hosts, total] = await Promise.all([
     User.find(filter)
-      .select("firstName lastName name email phone profileImage city workCity isActive createdAt")
+      .select("firstName lastName name email phone profileImage city workCity isActive isBlocked createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -131,7 +131,7 @@ const getHosts = async (query: Record<string, unknown>) => {
 
 const getHostById = async (id: string) => {
   const host = await User.findOne({ _id: id, role: "host" }).select(
-    "firstName lastName name email phone profileImage isActive createdAt",
+    "firstName lastName name email phone profileImage isActive isBlocked createdAt",
   );
   if (!host) throw new AppError(404, "Host not found");
 
@@ -166,7 +166,7 @@ const getCleaners = async (query: Record<string, unknown>) => {
 
   const [cleaners, total] = await Promise.all([
     User.find(filter)
-      .select("firstName lastName name email phone profileImage siretNumber interventionZone workCity cleaningsCompleted isActive createdAt")
+      .select("firstName lastName name email phone profileImage siretNumber interventionZone workCity cleaningsCompleted isActive isBlocked createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),
@@ -195,7 +195,7 @@ const getCleaners = async (query: Record<string, unknown>) => {
 
 const getCleanerById = async (id: string) => {
   const cleaner = await User.findOne({ _id: id, role: "cleaner" }).select(
-    "firstName lastName name email phone profileImage siretNumber interventionZone workCity cleaningsCompleted isActive createdAt",
+    "firstName lastName name email phone profileImage siretNumber interventionZone workCity cleaningsCompleted isActive isBlocked createdAt",
   );
   if (!cleaner) throw new AppError(404, "Cleaner not found");
 
@@ -281,11 +281,15 @@ const setUserBlocked = async (id: string, block: boolean) => {
   const user = await User.findById(id);
   if (!user) throw new AppError(404, "User not found");
 
-  user.isActive = !block;
+  // Blocking is tracked on its own flag. `isActive` belongs to the user (their
+  // profile-visibility switch) and must not be touched here — otherwise an
+  // unblock would silently re-expose a cleaner who chose to stay hidden.
+  user.isBlocked = block;
   await user.save();
 
   return {
     _id: user._id,
+    isBlocked: user.isBlocked,
     isActive: user.isActive,
     blocked: block,
   };
@@ -305,7 +309,7 @@ const getAdmins = async (query: Record<string, unknown>) => {
 
   const [data, total] = await Promise.all([
     User.find(filter)
-      .select("firstName lastName name email phone profileImage isActive createdAt")
+      .select("firstName lastName name email phone profileImage isActive isBlocked createdAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit),

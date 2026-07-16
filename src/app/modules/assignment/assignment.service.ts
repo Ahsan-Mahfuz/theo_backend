@@ -195,7 +195,10 @@ const findHousekeepers = async (query: Record<string, unknown>) => {
   const filter: any = {
     role: "cleaner",
     isDeleted: false,
+    // isActive is the cleaner's own switch: off means "don't show me to hosts",
+    // which is exactly this screen. Blocked cleaners are hidden here too.
     isActive: true,
+    isBlocked: { $ne: true },
   };
 
   if (query.search) {
