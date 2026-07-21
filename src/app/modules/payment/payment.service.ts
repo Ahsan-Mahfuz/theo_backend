@@ -87,7 +87,8 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
     host: hostId,
   });
   if (!schedule) throw new AppError(404, "Schedule not found");
-  if (schedule.status !== "accepted") {
+  const PAYABLE_STATUSES = ["accepted", "in_progress", "proof_submitted", "completed"];
+  if (!PAYABLE_STATUSES.includes(schedule.status)) {
     throw new AppError(
       400,
       "You can only pay once the cleaner has accepted the schedule.",
