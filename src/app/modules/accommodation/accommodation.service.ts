@@ -468,16 +468,14 @@ const buildRecommendations = async (
         accommodation: { $in: eligibleAccIds },
         status: { $nin: ["refused", "cancelled"] },
         date: { $gte: todayStart },
-      }).select("accommodation date booking")
+      }).select("accommodation date")
     : [];
 
   const scheduledDays = new Map<string, Set<string>>(); // accId -> {dayKey}
-  const scheduledBookings = new Set<string>();
   for (const s of existing) {
     const accKey = String(s.accommodation);
     if (!scheduledDays.has(accKey)) scheduledDays.set(accKey, new Set());
     scheduledDays.get(accKey)!.add(dayKey(new Date(s.date)));
-    if (s.booking) scheduledBookings.add(String(s.booking));
   }
 
   const recommendations: any[] = [];
@@ -487,16 +485,22 @@ const buildRecommendations = async (
 
     for (let i = 0; i < list.length; i++) {
       const current = list[i];
-      const next = list[i + 1]; // the booking that bounds the free window (if any)
       const checkout = new Date(current.endDate);
       if (checkout < todayStart) continue;
 
-      const freeUntil = next ? new Date(next.startDate) : null;
-      // a real free window must exist (next guest arrives after checkout)
-      if (freeUntil && freeUntil <= checkout) continue;
+      // Find the next booking that starts on or after this checkout
+      // to determine the free window for cleaning.
+      let next = null;
+      for (let j = i + 1; j < list.length; j++) {
+        if (new Date(list[j].startDate) >= checkout) {
+          next = list[j];
+          break;
+        }
+      }
 
-      // skip if this booking or the checkout day already has a cleaning
-      if (scheduledBookings.has(String(current._id))) continue;
+      const freeUntil = next ? new Date(next.startDate) : null;
+
+      // skip if the checkout day already has a cleaning scheduled
       if (scheduledDays.get(accKey)?.has(dayKey(checkout))) continue;
 
       recommendations.push({
