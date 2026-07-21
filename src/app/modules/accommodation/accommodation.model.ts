@@ -31,6 +31,8 @@ const accommodationSchema = new Schema<IAccommodation>(
     accessCode: { type: String },
     instructions: { type: String },
     frequency: { type: String },
+    checkInTime: { type: String, required: true },
+    checkOutTime: { type: String, required: true },
 
     // ─── Meta ─────────────────────────────────────────────────────────────────
     status: {

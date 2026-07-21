@@ -36,6 +36,8 @@ export interface IAccommodation extends Document {
   accessCode?: string;
   instructions?: string;
   frequency?: string;
+  checkInTime: string;
+  checkOutTime: string;
 
   // ─── Meta ───────────────────────────────────────────────────────────────────
   status: TAccommodationStatus;

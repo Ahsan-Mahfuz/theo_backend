@@ -393,7 +393,7 @@ const respondToSchedule = async (
   const accName = (schedule.accommodation as any)?.name || "an accommodation";
 
   if (action === "accept") {
-    schedule.status = "accepted";
+    schedule.status = "in_progress";
     await schedule.save();
 
     await NotificationService.createNotification({
@@ -790,13 +790,8 @@ const completeTask = async (hostId: string, scheduleId: string) => {
     throw new AppError(400, "Task already completed");
   }
 
-  // Strict escrow gate: the host must have paid before approving the work.
-  if (schedule.paymentStatus !== "paid_held") {
-    throw new AppError(
-      400,
-      "Payment must be completed before approving this task.",
-    );
-  }
+  // Bypassed escrow gate: cleaner can complete work without host payment.
+  // If payment was made (paid_held), it will release the payment; if unpaid, it proceeds silently.
 
   schedule.status = "completed";
   schedule.completedAt = new Date();

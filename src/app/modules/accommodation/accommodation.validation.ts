@@ -39,6 +39,8 @@ export const createAccommodationSchema = z.object({
   accessCode: z.string().optional(),
   instructions: z.string().optional(),
   frequency: z.string().optional(),
+  checkInTime: z.string().min(1, "Check-in time is required"),
+  checkOutTime: z.string().min(1, "Check-out time is required"),
 });
 
 export const updateAccommodationSchema = z.object({
@@ -62,5 +64,7 @@ export const updateAccommodationSchema = z.object({
   accessCode: z.string().optional(),
   instructions: z.string().optional(),
   frequency: z.string().optional(),
+  checkInTime: z.string().optional(),
+  checkOutTime: z.string().optional(),
   status: z.enum(["scheduled", "not_scheduled"]).optional(),
 });
