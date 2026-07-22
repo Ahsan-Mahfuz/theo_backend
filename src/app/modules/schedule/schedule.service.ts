@@ -871,6 +871,68 @@ const invalidateProof = async (
   return schedule;
 };
 
+// ─── Host: initiate hand cash ─────────────────────────────────────────────────
+const initiateHandCash = async (hostId: string, scheduleId: string) => {
+  const schedule = await CleaningSchedule.findOne({
+    _id: scheduleId,
+    host: hostId,
+  }).populate("accommodation", "name");
+  if (!schedule) throw new AppError(404, "Schedule not found");
+
+  if (schedule.paymentStatus !== "unpaid") {
+    throw new AppError(400, "Payment has already been initiated or completed.");
+  }
+  
+  if (!["accepted", "in_progress", "proof_submitted", "completed"].includes(schedule.status)) {
+    throw new AppError(400, "Cannot pay for a task that is not accepted by the cleaner.");
+  }
+
+  schedule.paymentStatus = "handcash_pending";
+  await schedule.save();
+
+  const accName = (schedule.accommodation as any)?.name || "an accommodation";
+  await NotificationService.createNotification({
+    user: String(schedule.cleaner),
+    title: "Hand cash payment pending",
+    message: `The host has requested to pay for ${accName} via hand cash. Please approve it once received.`,
+    type: "schedule_created",
+    data: { scheduleId: String(schedule._id) },
+  });
+
+  return schedule;
+};
+
+// ─── Cleaner: approve hand cash ───────────────────────────────────────────────
+const approveHandCash = async (cleanerId: string, scheduleId: string) => {
+  const schedule = await CleaningSchedule.findOne({
+    _id: scheduleId,
+    cleaner: cleanerId,
+  }).populate("accommodation", "name");
+  if (!schedule) throw new AppError(404, "Schedule not found");
+
+  if (schedule.paymentStatus !== "handcash_pending") {
+    throw new AppError(400, "Hand cash payment is not pending.");
+  }
+
+  schedule.paymentStatus = "paid_handcash";
+  
+  // If task is not completed, we should ideally complete it if hand cash is paid?
+  // Let's stick to just changing payment status, host can complete it or it will be marked completed.
+  
+  await schedule.save();
+
+  const accName = (schedule.accommodation as any)?.name || "an accommodation";
+  await NotificationService.createNotification({
+    user: String(schedule.host),
+    title: "Hand cash payment approved",
+    message: `The cleaner confirmed receiving the hand cash payment for ${accName}.`,
+    type: "schedule_created",
+    data: { scheduleId: String(schedule._id) },
+  });
+
+  return schedule;
+};
+
 export const ScheduleService = {
   createSchedule,
   updateSchedule,
@@ -885,4 +947,6 @@ export const ScheduleService = {
   reportDispute,
   completeTask,
   invalidateProof,
+  initiateHandCash,
+  approveHandCash,
 };

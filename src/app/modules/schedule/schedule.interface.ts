@@ -10,7 +10,7 @@ export type TScheduleStatus =
   | "disputed" // cleaner raised a dispute
   | "cancelled";
 
-export type TPaymentStatus = "unpaid" | "paid_held" | "released" | "refunded";
+export type TPaymentStatus = "unpaid" | "paid_held" | "released" | "refunded" | "handcash_pending" | "paid_handcash";
 
 export interface IDispute {
   reason?: string;

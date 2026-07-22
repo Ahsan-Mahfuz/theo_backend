@@ -52,7 +52,7 @@ const scheduleSchema = new Schema<ICleaningSchedule>(
     },
     paymentStatus: {
       type: String,
-      enum: ["unpaid", "paid_held", "released", "refunded"],
+      enum: ["unpaid", "paid_held", "released", "refunded", "handcash_pending", "paid_handcash"],
       default: "unpaid",
       index: true,
     },

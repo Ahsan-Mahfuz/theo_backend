@@ -51,6 +51,9 @@ router.patch(
 // DELETE /api/v1/schedule/:id — host deletes a schedule (any time before paying)
 router.delete("/:id", auth("admin", "host"), ScheduleController.deleteSchedule);
 
+// POST /api/v1/schedule/:id/handcash — host requests to pay via hand cash
+router.post("/:id/handcash", auth("admin", "host"), ScheduleController.initiateHandCash);
+
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 
 // GET /api/v1/schedule/cleaner/home — cleaner dashboard (today's cleaning + upcoming)
@@ -93,6 +96,9 @@ router.patch(
   upload.array("photos", 10),
   ScheduleController.reportDispute,
 );
+
+// POST /api/v1/schedule/:id/handcash/approve — cleaner approves hand cash
+router.post("/:id/handcash/approve", auth("cleaner"), ScheduleController.approveHandCash);
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 

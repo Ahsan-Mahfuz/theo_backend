@@ -91,6 +91,17 @@ const invalidateProof = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const initiateHandCash = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const result = await ScheduleService.initiateHandCash(hostId, req.params.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Hand cash payment initiated",
+    data: result,
+  });
+});
+
 // ─── Cleaner ──────────────────────────────────────────────────────────────────
 
 const respondToSchedule = catchAsync(async (req: Request, res: Response) => {
@@ -176,6 +187,17 @@ const reportDispute = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const approveHandCash = catchAsync(async (req: Request, res: Response) => {
+  const cleanerId = (req as any).user.userId;
+  const result = await ScheduleService.approveHandCash(cleanerId, req.params.id);
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Hand cash payment approved",
+    data: result,
+  });
+});
+
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
 const getScheduleById = catchAsync(async (req: Request, res: Response) => {
@@ -203,4 +225,6 @@ export const ScheduleController = {
   submitProof,
   reportDispute,
   getScheduleById,
+  initiateHandCash,
+  approveHandCash,
 };
