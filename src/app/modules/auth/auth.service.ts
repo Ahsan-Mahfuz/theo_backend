@@ -198,6 +198,8 @@ const selectRole = async (userId: string, role: "host" | "cleaner") => {
   await NotificationService.notifyAdmins({
     title: "New user joined",
     message: `${user.name || user.email} signed up as a ${role}.`,
+    titleFr: "Nouvel utilisateur inscrit",
+    messageFr: `${user.name || user.email} s'est inscrit en tant que ${role === "host" ? "hôte" : "agent d'entretien"}.`,
     type: "new_user",
     data: { userId: String(user._id), role },
   });

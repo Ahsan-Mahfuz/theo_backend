@@ -91,6 +91,8 @@ const assignCleaner = async (
     user: payload.cleanerId,
     title: "New cleaning request",
     message: `A host wants to add you for ${accommodation.name}.`,
+    titleFr: "Nouvelle demande de nettoyage",
+    messageFr: `Un hôte souhaite vous ajouter pour ${accommodation.name}.`,
     type: "assignment_request",
     data: { assignmentId: String(assignment._id), accommodationId },
   });
@@ -122,6 +124,8 @@ const respondToAssignment = async (
     user: String(assignment.host),
     title: `Cleaning request ${assignment.status}`,
     message: `A cleaner has ${assignment.status} your request for ${accName}.`,
+    titleFr: `Demande de nettoyage ${assignment.status === "accepted" ? "acceptée" : "refusée"}`,
+    messageFr: `Un agent d'entretien a ${assignment.status === "accepted" ? "accepté" : "refusé"} votre demande pour ${accName}.`,
     type: "assignment_response",
     data: { assignmentId: String(assignment._id) },
   });

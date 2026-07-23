@@ -18,6 +18,35 @@ const getMyNotifications = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getFrenchNotifications = catchAsync(async (req: Request, res: Response) => {
+  const userId = (req as any).user.userId;
+  const result = await NotificationService.getFrenchNotifications(
+    userId,
+    req.query as any,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "French notifications retrieved successfully",
+    data: result,
+  });
+});
+
+const createNotification = catchAsync(async (req: Request, res: Response) => {
+  const currentUserId = (req as any).user.userId;
+  const payload = {
+    ...req.body,
+    user: req.body.user || currentUserId,
+  };
+  const result = await NotificationService.createNotification(payload);
+  sendResponse(res, {
+    statusCode: 201,
+    success: true,
+    message: "Notification created successfully",
+    data: result,
+  });
+});
+
 const getUnreadCount = catchAsync(async (req: Request, res: Response) => {
   const userId = (req as any).user.userId;
   const result = await NotificationService.getUnreadCount(userId);
@@ -67,6 +96,8 @@ const deleteNotification = catchAsync(async (req: Request, res: Response) => {
 
 export const NotificationController = {
   getMyNotifications,
+  getFrenchNotifications,
+  createNotification,
   getUnreadCount,
   markAsRead,
   markAllAsRead,

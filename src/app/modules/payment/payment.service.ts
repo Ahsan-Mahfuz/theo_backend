@@ -236,6 +236,9 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
           title: "Payment received",
           message:
             "The host's payment is secured. You can start the cleaning — you'll be paid on approval.",
+          titleFr: "Paiement reçu",
+          messageFr:
+            "Le paiement de l'hôte est sécurisé. Vous pouvez commencer le nettoyage — vous serez payé après validation.",
           type: "general",
           data: { scheduleId: String(payment.schedule) },
         });
@@ -244,6 +247,8 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
         await NotificationService.notifyAdmins({
           title: "New payment received",
           message: `A host paid ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} — funds held in escrow.`,
+          titleFr: "Nouveau paiement reçu",
+          messageFr: `Un hôte a payé ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} — fonds conservés sous séquestre.`,
           type: "payment_received",
           data: {
             scheduleId: String(payment.schedule),
@@ -278,6 +283,8 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
             user: String(user._id),
             title: "Payouts enabled",
             message: "Your payout account is ready. You can now receive payments.",
+            titleFr: "Paiements activés",
+            messageFr: "Votre compte de paiement est prêt. Vous pouvez maintenant recevoir des paiements.",
             type: "general",
           });
         }
@@ -374,6 +381,8 @@ const releaseForSchedule = async (scheduleId: string) => {
     user: String(payment.cleaner),
     title: "You've been paid",
     message: `Your payout of ${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} is on its way.`,
+    titleFr: "Vous avez été payé",
+    messageFr: `Votre paiement de ${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} est en cours d'acheminement.`,
     type: "general",
     data: { scheduleId: String(scheduleId) },
   });
@@ -382,6 +391,8 @@ const releaseForSchedule = async (scheduleId: string) => {
   await NotificationService.notifyAdmins({
     title: "Payout released",
     message: `${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} was released to the cleaner.`,
+    titleFr: "Paiement libéré",
+    messageFr: `${(payment.cleanerAmount / 100).toFixed(2)} ${payment.currency.toUpperCase()} ont été versés à l'agent d'entretien.`,
     type: "payment_received",
     data: {
       scheduleId: String(scheduleId),
@@ -421,6 +432,8 @@ const refundPayment = async (paymentId: string, reason?: string) => {
     user: String(payment.host),
     title: "Payment refunded",
     message: "Your payment has been refunded.",
+    titleFr: "Paiement remboursé",
+    messageFr: "Votre paiement a été remboursé.",
     type: "general",
     data: { scheduleId: String(payment.schedule) },
   });

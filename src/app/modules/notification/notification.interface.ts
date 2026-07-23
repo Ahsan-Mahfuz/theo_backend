@@ -21,6 +21,8 @@ export interface INotification extends Document {
   user: Types.ObjectId; // recipient
   title: string;
   message: string;
+  titleFr?: string;
+  messageFr?: string;
   type: TNotificationType;
   data?: Record<string, unknown>; // extra payload (ids, etc.)
   isRead: boolean;

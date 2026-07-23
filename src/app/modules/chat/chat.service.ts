@@ -180,6 +180,8 @@ const createMessage = async (
       user: receiverId,
       title: `New message from ${senderName}`,
       message: payload.content || "Sent you an attachment",
+      titleFr: `Nouveau message de ${senderName}`,
+      messageFr: payload.content || "Vous a envoyé une pièce jointe",
       type: "message",
       data: {
         conversationId: payload.conversationId,

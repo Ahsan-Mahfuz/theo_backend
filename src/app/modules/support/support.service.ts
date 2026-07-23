@@ -37,6 +37,8 @@ const createTicket = async (
   await NotificationService.notifyAdmins({
     title: "New support request",
     message: `${payload.email}: ${payload.subject}`,
+    titleFr: "Nouvelle demande d'assistance",
+    messageFr: `${payload.email}: ${payload.subject}`,
     type: "support_ticket",
     data: { ticketId: String(ticket._id) },
   });

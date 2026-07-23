@@ -7,6 +7,15 @@ const router = express.Router();
 // GET /api/v1/notification — my notifications (?page&limit&isRead&type)
 router.get("/", auth(), NotificationController.getMyNotifications);
 
+// GET /api/v1/notification/fn — get notifications in French
+router.get("/fn", auth(), NotificationController.getFrenchNotifications);
+
+// GET /api/v1/notification/fr — alias to get notifications in French
+router.get("/fr", auth(), NotificationController.getFrenchNotifications);
+
+// POST /api/v1/notification — create a notification with title/message and titleFr/messageFr
+router.post("/", auth(), NotificationController.createNotification);
+
 // GET /api/v1/notification/unread-count — badge count for the bell
 router.get("/unread-count", auth(), NotificationController.getUnreadCount);
 

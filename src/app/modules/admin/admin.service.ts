@@ -344,6 +344,8 @@ const createAdmin = async (payload: {
     user: String(admin._id),
     title: "Welcome to Gestlio Admin",
     message: "Your admin account has been created. You now have dashboard access.",
+    titleFr: "Bienvenue sur Gestlio Admin",
+    messageFr: "Votre compte administrateur a été créé. Vous avez maintenant accès au tableau de bord.",
     type: "admin_account",
     data: { adminId: String(admin._id) },
   });

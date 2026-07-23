@@ -182,6 +182,8 @@ const createSchedule = async (
     user: String(assignment.cleaner),
     title: "New cleaning scheduled",
     message: `${accommodation.name} is scheduled for ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkInTime}–${payload.checkOutTime}).`,
+    titleFr: "Nouveau nettoyage planifié",
+    messageFr: `${accommodation.name} est planifié pour le ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkInTime}–${payload.checkOutTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id), accommodationId },
   });
@@ -243,6 +245,8 @@ const updateSchedule = async (
       user: previousCleanerId,
       title: "Cleaning schedule reassigned",
       message: `The host reassigned the cleaning for ${accName} to another cleaner.`,
+      titleFr: "Planning de ménage réattribué",
+      messageFr: `L'hôte a réattribué le ménage pour ${accName} à un autre agent d'entretien.`,
       type: "schedule_created",
       data: { scheduleId: String(schedule._id) },
     });
@@ -298,6 +302,8 @@ const updateSchedule = async (
     user: String(schedule.cleaner),
     title: "Cleaning schedule updated",
     message: `The host updated the cleaning for ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
+    titleFr: "Planning de ménage mis à jour",
+    messageFr: `L'hôte a mis à jour le ménage pour ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });
@@ -367,6 +373,8 @@ const deleteSchedule = async (hostId: string, scheduleId: string) => {
       user: String(schedule.cleaner),
       title: "Cleaning schedule cancelled",
       message: `The host cancelled the cleaning for ${accName}.`,
+      titleFr: "Planning de ménage annulé",
+      messageFr: `L'hôte a annulé le ménage pour ${accName}.`,
       type: "schedule_created",
       data: { scheduleId: String(schedule._id) },
     });
@@ -400,6 +408,8 @@ const respondToSchedule = async (
       user: String(schedule.host),
       title: "Cleaning accepted",
       message: `The cleaner accepted the cleaning for ${accName}. You can now proceed to payment.`,
+      titleFr: "Nettoyage accepté",
+      messageFr: `L'agent d'entretien a accepté le nettoyage pour ${accName}. Vous pouvez maintenant procéder au paiement.`,
       type: "schedule_created",
       data: { scheduleId: String(schedule._id) },
     });
@@ -417,6 +427,8 @@ const respondToSchedule = async (
       user: String(schedule.host),
       title: "Cleaning refused",
       message: `The cleaner refused the cleaning for ${accName}.`,
+      titleFr: "Nettoyage refusé",
+      messageFr: `L'agent d'entretien a refusé le nettoyage pour ${accName}.`,
       type: "schedule_created",
       data: { scheduleId: String(schedule._id) },
     });
@@ -728,6 +740,8 @@ const submitProof = async (
     user: String(schedule.host),
     title: "Proof submitted",
     message: `The cleaner submitted proof of completion for ${accName}.`,
+    titleFr: "Preuve soumise",
+    messageFr: `L'agent d'entretien a soumis la preuve de réalisation pour ${accName}.`,
     type: "proof_submitted",
     data: { scheduleId: String(schedule._id) },
   });
@@ -764,6 +778,8 @@ const reportDispute = async (
     user: String(schedule.host),
     title: "Dispute reported",
     message: `The cleaner reported a dispute for ${accName}.`,
+    titleFr: "Litige signalé",
+    messageFr: `L'agent d'entretien a signalé un litige pour ${accName}.`,
     type: "dispute",
     data: { scheduleId: String(schedule._id) },
   });
@@ -772,6 +788,8 @@ const reportDispute = async (
   await NotificationService.notifyAdmins({
     title: "Dispute needs review",
     message: `A dispute was raised for ${accName}.`,
+    titleFr: "Litige à examiner",
+    messageFr: `Un litige a été ouvert pour ${accName}.`,
     type: "dispute",
     data: { scheduleId: String(schedule._id) },
   });
@@ -815,6 +833,8 @@ const completeTask = async (hostId: string, scheduleId: string) => {
     user: String(schedule.cleaner),
     title: "Task completed",
     message: `The host marked the cleaning for ${accName} as completed.`,
+    titleFr: "Tâche terminée",
+    messageFr: `L'hôte a marqué le nettoyage pour ${accName} comme terminé.`,
     type: "task_completed",
     data: { scheduleId: String(schedule._id) },
   });
@@ -864,6 +884,10 @@ const invalidateProof = async (
     message: `The host did not validate the cleaning for ${accName}${
       payload.reason ? `: ${payload.reason}` : ""
     }. Please review and resubmit your proof.`,
+    titleFr: "Nettoyage non validé",
+    messageFr: `L'hôte n'a pas validé le nettoyage pour ${accName}${
+      payload.reason ? `: ${payload.reason}` : ""
+    }. Veuillez réviser et soumettre à nouveau votre preuve.`,
     type: "proof_submitted",
     data: { scheduleId: String(schedule._id) },
   });
@@ -895,6 +919,8 @@ const initiateHandCash = async (hostId: string, scheduleId: string) => {
     user: String(schedule.cleaner),
     title: "Payment outside app requested",
     message: `The host has requested to pay for ${accName} outside the app. Please approve it once received.`,
+    titleFr: "Paiement hors application demandé",
+    messageFr: `L'hôte a demandé à payer pour ${accName} en dehors de l'application. Veuillez l'approuver une fois reçu.`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });
@@ -926,6 +952,8 @@ const approveHandCash = async (cleanerId: string, scheduleId: string) => {
     user: String(schedule.host),
     title: "Payment outside app approved",
     message: `The cleaner confirmed receiving the payment outside the app for ${accName}.`,
+    titleFr: "Paiement hors application approuvé",
+    messageFr: `L'agent d'entretien a confirmé la réception du paiement hors application pour ${accName}.`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });
