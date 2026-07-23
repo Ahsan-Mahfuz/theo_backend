@@ -893,8 +893,8 @@ const initiateHandCash = async (hostId: string, scheduleId: string) => {
   const accName = (schedule.accommodation as any)?.name || "an accommodation";
   await NotificationService.createNotification({
     user: String(schedule.cleaner),
-    title: "Hand cash payment pending",
-    message: `The host has requested to pay for ${accName} via hand cash. Please approve it once received.`,
+    title: "Payment outside app requested",
+    message: `The host has requested to pay for ${accName} outside the app. Please approve it once received.`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });
@@ -924,8 +924,8 @@ const approveHandCash = async (cleanerId: string, scheduleId: string) => {
   const accName = (schedule.accommodation as any)?.name || "an accommodation";
   await NotificationService.createNotification({
     user: String(schedule.host),
-    title: "Hand cash payment approved",
-    message: `The cleaner confirmed receiving the hand cash payment for ${accName}.`,
+    title: "Payment outside app approved",
+    message: `The cleaner confirmed receiving the payment outside the app for ${accName}.`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });

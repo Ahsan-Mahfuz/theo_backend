@@ -9,9 +9,13 @@ import { CleaningSchedule } from "../schedule/schedule.model";
 import { Accommodation } from "../accommodation/accommodation.model";
 import { CleanerAssignment } from "../assignment/assignment.model";
 import { NotificationService } from "../notification/notification.service";
+import { AppSettings } from "../settings/settings.model";
 
 const CURRENCY = config.platform_currency || "eur";
-const FEE_PERCENT = config.platform_fee_percent || 5;
+const getFeePercent = async (): Promise<number> => {
+  const settings = await AppSettings.findOne({ key: "global" });
+  return settings?.platformCommission ?? config.platform_fee_percent ?? 5;
+};
 
 const returnUrl =
   config.stripe_connect_return_url ||
@@ -117,7 +121,8 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
 
   const amount = Math.round((unitPrice || 0) * 100);
   if (amount <= 0) throw new AppError(400, "Invalid cleaning rate");
-  const platformFee = Math.round((amount * FEE_PERCENT) / 100);
+  const feePercent = await getFeePercent();
+  const platformFee = Math.round((amount * feePercent) / 100);
   const cleanerAmount = amount - platformFee;
 
   // Reuse a pending payment if one already exists (idempotent retry)
