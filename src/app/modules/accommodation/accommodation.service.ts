@@ -561,10 +561,18 @@ const getHostDashboard = async (
   // Every host-facing interaction on their accommodations: assignment responses
   // and cleaning-schedule status changes (accepted/refused/completed/dispute…).
   const [schedules, assignments] = await Promise.all([
-    CleaningSchedule.find({ host: hostId, accommodation: { $in: accIds } })
+    CleaningSchedule.find({
+      host: hostId,
+      accommodation: { $in: accIds },
+      dismissedFromTodo: { $ne: true },
+    })
       .populate("cleaner", CLEANER_CARD_FIELDS)
       .populate("accommodation", ACC_CARD_FIELDS),
-    CleanerAssignment.find({ host: hostId, accommodation: { $in: accIds } })
+    CleanerAssignment.find({
+      host: hostId,
+      accommodation: { $in: accIds },
+      dismissedFromTodo: { $ne: true },
+    })
       .populate("cleaner", CLEANER_CARD_FIELDS)
       .populate("accommodation", ACC_CARD_FIELDS),
   ]);
@@ -840,6 +848,32 @@ const deleteAccommodation = async (hostId: string, accommodationId: string) => {
   return { message: "Accommodation deleted successfully" };
 };
 
+const deleteTodoItem = async (
+  hostId: string,
+  kind: "schedule" | "assignment",
+  id: string,
+) => {
+  if (kind === "schedule") {
+    const updated = await CleaningSchedule.findOneAndUpdate(
+      { _id: id, host: hostId },
+      { dismissedFromTodo: true },
+      { new: true },
+    );
+    if (!updated) throw new AppError(404, "To-do item not found");
+  } else if (kind === "assignment") {
+    const updated = await CleanerAssignment.findOneAndUpdate(
+      { _id: id, host: hostId },
+      { dismissedFromTodo: true },
+      { new: true },
+    );
+    if (!updated) throw new AppError(404, "To-do item not found");
+  } else {
+    throw new AppError(400, "Invalid kind for to-do item");
+  }
+
+  return { message: "To-do item deleted successfully" };
+};
+
 export const AccommodationService = {
   createAccommodation,
   getMyAccommodations,
@@ -851,4 +885,5 @@ export const AccommodationService = {
   getAccommodationForCleaner,
   updateAccommodation,
   deleteAccommodation,
+  deleteTodoItem,
 };

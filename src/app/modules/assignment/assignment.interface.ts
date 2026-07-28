@@ -12,6 +12,7 @@ export interface ICleanerAssignment extends Document {
   pricePerCleaning?: number; // shown on the request card
   message?: string; // host's note, e.g. "Looking for a trustworthy person"
   respondedAt?: Date;
+  dismissedFromTodo?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

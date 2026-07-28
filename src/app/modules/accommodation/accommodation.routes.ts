@@ -81,6 +81,13 @@ router.patch(
   AccommodationController.updateAccommodation,
 );
 
+// DELETE /api/v1/accommodation/todo/:kind/:id — Host dismisses a to-do item
+router.delete(
+  "/todo/:kind/:id",
+  auth("admin", "host"),
+  AccommodationController.deleteTodoItem,
+);
+
 // DELETE /api/v1/accommodation/:id — Soft delete
 router.delete(
   "/:id",

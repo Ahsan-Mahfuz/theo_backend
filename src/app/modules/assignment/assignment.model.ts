@@ -29,6 +29,7 @@ const assignmentSchema = new Schema<ICleanerAssignment>(
     pricePerCleaning: { type: Number },
     message: { type: String },
     respondedAt: { type: Date },
+    dismissedFromTodo: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

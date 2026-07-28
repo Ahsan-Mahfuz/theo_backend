@@ -50,6 +50,8 @@ export interface ICleaningSchedule extends Document {
   invalidatedAt?: Date;
   invalidationCount: number;
 
+  dismissedFromTodo?: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 }

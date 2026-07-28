@@ -192,6 +192,22 @@ const deleteAccommodation = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const deleteTodoItem = catchAsync(async (req: Request, res: Response) => {
+  const hostId = (req as any).user.userId;
+  const { kind, id } = req.params;
+  const result = await AccommodationService.deleteTodoItem(
+    hostId,
+    kind as "schedule" | "assignment",
+    id,
+  );
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "To-do item deleted successfully",
+    data: result,
+  });
+});
+
 export const AccommodationController = {
   createAccommodation,
   getMyAccommodations,
@@ -203,4 +219,5 @@ export const AccommodationController = {
   getAccommodationForCleaner,
   updateAccommodation,
   deleteAccommodation,
+  deleteTodoItem,
 };

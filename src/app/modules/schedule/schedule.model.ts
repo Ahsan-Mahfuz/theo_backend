@@ -71,6 +71,8 @@ const scheduleSchema = new Schema<ICleaningSchedule>(
     invalidationReason: { type: String },
     invalidatedAt: { type: Date },
     invalidationCount: { type: Number, default: 0 },
+
+    dismissedFromTodo: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

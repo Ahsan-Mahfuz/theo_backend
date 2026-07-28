@@ -3,13 +3,15 @@ import config from "../config";
 interface IPushPayload {
   title:    string;
   message:  string;
+  titleFr?: string;
+  messageFr?: string;
   data?:    Record<string, unknown>;
 }
 
 /**
  * Send a push notification to a single user via OneSignal.
  * @param playerId  - OneSignal player/subscription ID saved on the User model
- * @param payload   - { title, message, data }
+ * @param payload   - { title, message, titleFr, messageFr, data }
  */
 const sendPushNotification = async (
   playerId: string,
@@ -17,12 +19,15 @@ const sendPushNotification = async (
 ): Promise<void> => {
   if (!playerId) return; // user hasn't granted push permission yet
 
+  const titleFr = payload.titleFr || payload.title;
+  const messageFr = payload.messageFr || payload.message;
+
   try {
     const body = {
       app_id:             config.onesignal_app_id,
       include_player_ids: [playerId],
-      headings:           { en: payload.title },
-      contents:           { en: payload.message },
+      headings:           { en: titleFr, fr: titleFr },
+      contents:           { en: messageFr, fr: messageFr },
       data:               payload.data || {},         // extra key-value pairs for the app
       ios_badgeType:      "Increase",
       ios_badgeCount:     1,

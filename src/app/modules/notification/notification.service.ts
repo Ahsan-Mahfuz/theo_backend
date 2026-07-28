@@ -32,8 +32,9 @@ interface ICreateNotification {
  *      they never receive a push; only the host/cleaner mobile app does.
  */
 const createNotification = async (payload: ICreateNotification) => {
-  const titleFr = payload.titleFr || payload.title_fr || payload.titleFn;
-  const messageFr = payload.messageFr || payload.message_fr || payload.messageFn;
+  const fallback = translateToFrenchFallback(payload.title, payload.message);
+  const titleFr = payload.titleFr || payload.title_fr || payload.titleFn || fallback.titleFr;
+  const messageFr = payload.messageFr || payload.message_fr || payload.messageFn || fallback.messageFr;
 
   const notification = await Notification.create({
     user: payload.user,
@@ -64,6 +65,8 @@ const createNotification = async (payload: ICreateNotification) => {
       await sendPushNotification(recipient.playerId, {
         title: payload.title,
         message: payload.message,
+        titleFr,
+        messageFr,
         data: { type: payload.type || "general", ...(payload.data || {}) },
       });
     }
@@ -179,6 +182,9 @@ const translateToFrenchFallback = (title: string, message: string) => {
   } else if (message.startsWith("The host marked the cleaning for ") && message.endsWith(" as completed.")) {
     const acc = message.replace("The host marked the cleaning for ", "").replace(" as completed.", "");
     messageFr = `L'hôte a marqué le nettoyage pour ${acc} comme terminé.`;
+  } else if (message.startsWith("The host did not validate the cleaning for ")) {
+    const acc = message.replace("The host did not validate the cleaning for ", "").replace(/\.$/, "");
+    messageFr = `L'hôte n'a pas validé le nettoyage pour ${acc}.`;
   } else if (message.startsWith("The host cancelled the cleaning for ")) {
     const acc = message.replace("The host cancelled the cleaning for ", "").replace(/\.$/, "");
     messageFr = `L'hôte a annulé le ménage pour ${acc}.`;
