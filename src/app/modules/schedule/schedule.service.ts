@@ -13,10 +13,11 @@ import { TimezoneUtils } from "../../utilities/timezone.utils";
 // Currency the host is charged in (matches the payment module).
 const PAY_CURRENCY = config.platform_currency || "eur";
 
-// Estimated duration (in hours) between checkInTime and checkOutTime ("HH:mm")
-const estimationHours = (checkInTime: string, checkOutTime: string): number => {
-  const [h1, m1] = checkInTime.split(":").map(Number);
-  const [h2, m2] = checkOutTime.split(":").map(Number);
+// Estimated duration (in hours) between checkOutTime and checkInTime ("HH:mm")
+const estimationHours = (checkOutTime: string, checkInTime: string): number => {
+  if (!checkOutTime || !checkInTime) return 0;
+  const [h1, m1] = checkOutTime.split(":").map(Number);
+  const [h2, m2] = checkInTime.split(":").map(Number);
   let minutes = h2 * 60 + m2 - (h1 * 60 + m1);
   if (minutes < 0) minutes += 24 * 60; // crosses midnight
   return Math.round((minutes / 60) * 10) / 10;
@@ -62,7 +63,7 @@ const toMissionCard = (s: any) => {
     host: normalizeHost(obj.host),
     dayKey: dayKeyOf(new Date(obj.date)),
     dayLabel: dayLabelOf(new Date(obj.date)),
-    estimationHours: estimationHours(obj.checkInTime, obj.checkOutTime),
+    estimationHours: estimationHours(obj.checkOutTime, obj.checkInTime),
     cleanerResponse: cleanerResponseOf(obj.status),
     payAmount,
     payCurrency: PAY_CURRENCY,
@@ -181,9 +182,9 @@ const createSchedule = async (
   await NotificationService.createNotification({
     user: String(assignment.cleaner),
     title: "New cleaning scheduled",
-    message: `${accommodation.name} is scheduled for ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkInTime}–${payload.checkOutTime}).`,
+    message: `${accommodation.name} is scheduled for ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkOutTime}–${payload.checkInTime}).`,
     titleFr: "Nouveau nettoyage planifié",
-    messageFr: `${accommodation.name} est planifié pour le ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkInTime}–${payload.checkOutTime}).`,
+    messageFr: `${accommodation.name} est planifié pour le ${TimezoneUtils.dateString(scheduleDate)} (${payload.checkOutTime}–${payload.checkInTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id), accommodationId },
   });
@@ -301,9 +302,9 @@ const updateSchedule = async (
   await NotificationService.createNotification({
     user: String(schedule.cleaner),
     title: "Cleaning schedule updated",
-    message: `The host updated the cleaning for ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
+    message: `The host updated the cleaning for ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkOutTime}–${schedule.checkInTime}).`,
     titleFr: "Planning de ménage mis à jour",
-    messageFr: `L'hôte a mis à jour le ménage pour ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkInTime}–${schedule.checkOutTime}).`,
+    messageFr: `L'hôte a mis à jour le ménage pour ${accName} — ${TimezoneUtils.dateString(schedule.date)} (${schedule.checkOutTime}–${schedule.checkInTime}).`,
     type: "schedule_created",
     data: { scheduleId: String(schedule._id) },
   });

@@ -516,8 +516,8 @@ const buildRecommendations = async (
         recommendedDate: checkout,
         freeFrom: checkout,
         freeUntil,
-        checkInTime: hhmm(checkout),
-        checkOutTime: freeUntil ? hhmm(freeUntil) : null,
+        checkOutTime: hhmm(checkout),
+        checkInTime: freeUntil ? hhmm(freeUntil) : null,
         booking: {
           _id: current._id,
           summary: current.summary,
