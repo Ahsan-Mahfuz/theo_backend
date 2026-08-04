@@ -771,6 +771,15 @@ const getAccommodationForCleaner = async (
   // Always expose the host's profileImage + phone (null when not set yet)
   const accObj = accommodation.toObject() as any;
   const host = accObj.host || {};
+
+  // how many accommodations this host owns in total
+  const totalAccommodation = host._id
+    ? await Accommodation.countDocuments({
+        host: host._id,
+        isDeleted: false,
+      })
+    : 0;
+
   accObj.host = {
     _id: host._id ?? null,
     firstName: host.firstName ?? null,
@@ -778,6 +787,7 @@ const getAccommodationForCleaner = async (
     name: host.name ?? null,
     profileImage: host.profileImage ?? null,
     phone: host.phone ?? null,
+    totalAccommodation,
   };
 
   return {
