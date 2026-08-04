@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { Types } from "mongoose";
 import { CleaningSchedule } from "./schedule.model";
 import { Accommodation } from "../accommodation/accommodation.model";
 import { User } from "../user/user.model";
@@ -512,18 +513,46 @@ const getCleanerSchedules = async (
   const limit = Number(query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const filter: any = { cleaner: cleanerId };
+  const filter: any = { cleaner: new Types.ObjectId(cleanerId) };
   if (query.status) filter.status = cleanerStatusFilter(String(query.status));
 
+  // Today/upcoming missions come first (soonest first), past ones after
+  // (most recent first). "Today" is the start of the day in the viewer's tz.
+  const { start: startOfToday } = TimezoneUtils.todayRange();
+  const isPast = { $lt: ["$date", startOfToday] };
+
   const [data, total] = await Promise.all([
-    CleaningSchedule.find(filter)
-      .populate("accommodation", "name address city photos accommodationType surface floor numberOfRooms keys accessCode instructions cleaningRate")
-      .populate("host", "firstName lastName name profileImage phone")
-      .populate("assignment", "pricePerCleaning role")
-      .sort({ date: 1 })
-      .skip(skip)
-      .limit(limit),
+    CleaningSchedule.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          _isPast: { $cond: [isPast, 1, 0] },
+          // negate the past dates so they sort newest → oldest in the same pass
+          _order: {
+            $cond: [
+              isPast,
+              { $multiply: [{ $toLong: "$date" }, -1] },
+              { $toLong: "$date" },
+            ],
+          },
+        },
+      },
+      { $sort: { _isPast: 1, _order: 1, checkInTime: 1 } },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { _isPast: 0, _order: 0 } },
+    ]),
     CleaningSchedule.countDocuments(filter),
+  ]);
+
+  await CleaningSchedule.populate(data, [
+    {
+      path: "accommodation",
+      select:
+        "name address city photos accommodationType surface floor numberOfRooms keys accessCode instructions cleaningRate",
+    },
+    { path: "host", select: "firstName lastName name profileImage phone" },
+    { path: "assignment", select: "pricePerCleaning role" },
   ]);
 
   const rows = data.map((s) => toMissionCard(s));
