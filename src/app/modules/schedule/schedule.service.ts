@@ -82,6 +82,16 @@ const cleanerResponseOf = (
   return "accepted";
 };
 
+// The cleaner app filters by the response the cleaner gave, not by the raw
+// lifecycle status. Accepting a schedule moves it straight to "in_progress"
+// (payment is the host's step and may still be pending), so ?status=accepted
+// has to cover both — paid or not.
+const cleanerStatusFilter = (status: string): any => {
+  if (status === "accepted") return { $in: ["accepted", "in_progress"] };
+  if (status === "refuse") return "refused";
+  return status;
+};
+
 // Start/end of the calendar day for a given date (used for same-day checks),
 // computed in the viewer's timezone.
 const dayRange = (date: Date) => TimezoneUtils.dayRange(date);
@@ -503,7 +513,7 @@ const getCleanerSchedules = async (
   const skip = (page - 1) * limit;
 
   const filter: any = { cleaner: cleanerId };
-  if (query.status) filter.status = query.status;
+  if (query.status) filter.status = cleanerStatusFilter(String(query.status));
 
   const [data, total] = await Promise.all([
     CleaningSchedule.find(filter)
@@ -618,7 +628,7 @@ const getCleanerPlanning = async (
     date: { $gte: from, $lte: to },
     status: { $nin: ["cancelled"] },
   };
-  if (query.status) filter.status = query.status;
+  if (query.status) filter.status = cleanerStatusFilter(String(query.status));
 
   const schedules = await CleaningSchedule.find(filter)
     .populate("accommodation", ACCOMMODATION_CARD_FIELDS)
