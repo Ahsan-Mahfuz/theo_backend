@@ -277,12 +277,19 @@ const fetchScheduleChain = async (match: Record<string, unknown>) => {
   const scheduleIds = schedules.map((s) => s._id);
   const payments = await Payment.find({
     schedule: { $in: scheduleIds },
-  }).select(
-    "schedule status amount currency platformFee cleanerAmount createdAt",
-  );
+  })
+    .select("schedule status amount currency platformFee cleanerAmount createdAt")
+    // Oldest first, and settled payments last, so the map below keeps the one
+    // that actually went through rather than an abandoned "pending" attempt.
+    .sort({ createdAt: 1 });
 
+  const SETTLED = ["paid_held", "released", "refunded"];
   const paymentBySchedule = new Map<string, any>();
   for (const p of payments) {
+    const kept = paymentBySchedule.get(String(p.schedule));
+    if (kept && SETTLED.includes(kept.status) && !SETTLED.includes(p.status)) {
+      continue;
+    }
     paymentBySchedule.set(String(p.schedule), {
       paymentId: p._id,
       status: p.status,

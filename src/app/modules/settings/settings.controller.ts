@@ -13,6 +13,16 @@ const getSettings = catchAsync(async (_req: Request, res: Response) => {
   });
 });
 
+const getPublicSettings = catchAsync(async (_req: Request, res: Response) => {
+  const result = await SettingsService.getPublicSettings();
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Settings retrieved successfully",
+    data: result,
+  });
+});
+
 const updateSettings = catchAsync(async (req: Request, res: Response) => {
   const result = await SettingsService.updateSettings(req.body);
   sendResponse(res, {
@@ -25,5 +35,6 @@ const updateSettings = catchAsync(async (req: Request, res: Response) => {
 
 export const SettingsController = {
   getSettings,
+  getPublicSettings,
   updateSettings,
 };

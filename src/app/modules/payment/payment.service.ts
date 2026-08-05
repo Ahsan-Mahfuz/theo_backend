@@ -119,17 +119,16 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
   const assignment = await CleanerAssignment.findById(schedule.assignment);
   const unitPrice = assignment?.pricePerCleaning ?? accommodation.cleaningRate ?? 0;
 
-  const amount = Math.round((unitPrice || 0) * 100);
-  if (amount <= 0) throw new AppError(400, "Invalid cleaning rate");
+  // The cleaner is paid their agreed rate in full — the platform fee is added
+  // ON TOP and charged to the host, never deducted from the cleaner's payout.
+  //   cleanerAmount = the rate the cleaner agreed to
+  //   platformFee   = feePercent of that rate
+  //   amount        = what the host is charged (rate + fee)
+  const cleanerAmount = Math.round((unitPrice || 0) * 100);
+  if (cleanerAmount <= 0) throw new AppError(400, "Invalid cleaning rate");
   const feePercent = await getFeePercent();
-  const platformFee = Math.round((amount * feePercent) / 100);
-  const cleanerAmount = amount - platformFee;
-
-  // Reuse a pending payment if one already exists (idempotent retry)
-  let payment = await Payment.findOne({
-    schedule: scheduleId,
-    status: "pending",
-  });
+  const platformFee = Math.round((cleanerAmount * feePercent) / 100);
+  const amount = cleanerAmount + platformFee;
 
   const host = await User.findById(hostId);
   if (!host) throw new AppError(404, "Host not found");
@@ -150,27 +149,45 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
     { apiVersion: PINNED_API_VERSION },
   );
 
-  if (!payment) {
-    payment = await Payment.create({
-      schedule: scheduleId,
-      host: hostId,
-      cleaner: schedule.cleaner,
-      accommodation: schedule.accommodation,
-      amount,
-      currency: CURRENCY,
-      platformFee,
-      cleanerAmount,
-      status: "pending",
-    });
-  }
-
-  let paymentIntent;
-  if (payment.stripePaymentIntentId) {
-    paymentIntent = await stripe.paymentIntents.retrieve(
-      payment.stripePaymentIntentId,
+  // Reuse the schedule's pending payment, or create it — in ONE atomic upsert.
+  // The checkout sheet mounts twice in React StrictMode, so two of these can be
+  // in flight at once; a find-then-create would let both insert. Backed by the
+  // partial unique index on { schedule, status: "pending" }, only one insert can
+  // win and the loser reuses the winner's row.
+  //
+  // The $set re-prices any row from an earlier attempt: the cleaner's rate or
+  // the platform commission may have changed since it was created, and the host
+  // must never be charged a stale total.
+  let payment;
+  try {
+    payment = await Payment.findOneAndUpdate(
+      { schedule: scheduleId, status: "pending" },
+      {
+        $set: { amount, platformFee, cleanerAmount },
+        $setOnInsert: {
+          schedule: scheduleId,
+          host: hostId,
+          cleaner: schedule.cleaner,
+          accommodation: schedule.accommodation,
+          currency: CURRENCY,
+          status: "pending",
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
     );
-  } else {
-    paymentIntent = await stripe.paymentIntents.create({
+  } catch (err) {
+    // Duplicate key: a concurrent request inserted first — take its row.
+    if ((err as { code?: number }).code !== 11000) throw err;
+    payment = await Payment.findOneAndUpdate(
+      { schedule: scheduleId, status: "pending" },
+      { $set: { amount, platformFee, cleanerAmount } },
+      { new: true },
+    );
+  }
+  if (!payment) throw new AppError(500, "Could not start the payment");
+
+  const createIntent = () =>
+    stripe.paymentIntents.create({
       amount,
       currency: CURRENCY,
       customer: host.stripeCustomerId,
@@ -182,6 +199,48 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
         cleanerId: String(schedule.cleaner),
       },
     });
+
+  let paymentIntent;
+  if (payment.stripePaymentIntentId) {
+    paymentIntent = await stripe.paymentIntents.retrieve(
+      payment.stripePaymentIntentId,
+    );
+
+    if (paymentIntent.status === "succeeded") {
+      // The host already paid, but the webhook never landed — so the app still
+      // thinks this is unpaid and handed us the pending row. Reconcile here
+      // rather than serving a client secret Stripe will refuse to confirm.
+      await markPaymentPaid(payment, paymentIntent);
+      throw new AppError(400, "This schedule is already paid.");
+    }
+
+    if (["canceled", "processing"].includes(paymentIntent.status)) {
+      // Cancelled intents can never be confirmed again, and a processing one
+      // must not be touched — start a fresh intent for this new attempt.
+      if (paymentIntent.status === "processing") {
+        throw new AppError(
+          400,
+          "A payment for this cleaning is still being processed. Please wait a moment and refresh.",
+        );
+      }
+      paymentIntent = await createIntent();
+      payment.stripePaymentIntentId = paymentIntent.id;
+      await payment.save();
+    } else if (paymentIntent.amount !== amount) {
+      // Push the re-priced total onto the intent too — only while it is still
+      // sitting on the sheet unconfirmed; anything further along is Stripe's.
+      if (
+        ["requires_payment_method", "requires_confirmation"].includes(
+          paymentIntent.status,
+        )
+      ) {
+        paymentIntent = await stripe.paymentIntents.update(paymentIntent.id, {
+          amount,
+        });
+      }
+    }
+  } else {
+    paymentIntent = await createIntent();
     payment.stripePaymentIntentId = paymentIntent.id;
     await payment.save();
   }
@@ -192,9 +251,121 @@ const payForSchedule = async (hostId: string, scheduleId: string) => {
     ephemeralKey: ephemeralKey.secret,
     customerId: host.stripeCustomerId,
     publishableKey: config.stripe_publishable_key,
+    // Breakdown the host sees on the checkout sheet (all in cents):
+    // cleanerAmount + platformFee = amount.
     amount,
+    cleanerAmount,
+    platformFee,
+    feePercent,
     currency: CURRENCY,
   };
+};
+
+// ─── Retire the losers of a duplicate-checkout race ───────────────────────────
+// Marks every OTHER pending payment on a schedule as failed and cancels its
+// PaymentIntent, so the host can't be charged twice and no stale row is left
+// behind to be mistaken for the real one.
+const voidOtherPendingForSchedule = async (
+  scheduleId: string,
+  keepPaymentId: string,
+) => {
+  const others = await Payment.find({
+    schedule: scheduleId,
+    status: "pending",
+    _id: { $ne: keepPaymentId },
+  });
+
+  for (const stale of others) {
+    if (stale.stripePaymentIntentId) {
+      try {
+        await stripe.paymentIntents.cancel(stale.stripePaymentIntentId);
+      } catch (err) {
+        // Already cancelled/succeeded on Stripe's side — nothing to undo here.
+        console.error(
+          "⚠️ Stale PaymentIntent cancel failed:",
+          (err as Error).message,
+        );
+      }
+    }
+    await Payment.updateOne(
+      { _id: stale._id, status: "pending" },
+      { status: "failed" },
+    );
+  }
+};
+
+// ─── Record a successful charge (escrow funded) ───────────────────────────────
+/**
+ * Move a payment from "pending" to "paid_held" and fan out the side effects.
+ *
+ * Normally driven by the `payment_intent.succeeded` webhook, but ALSO called
+ * when the host reopens checkout and we find the intent already succeeded on
+ * Stripe's side. A webhook that never arrives — misconfigured endpoint, no
+ * `stripe listen` in local dev, a delivery that failed all its retries — used
+ * to leave the money captured at Stripe while the app still showed the cleaning
+ * as unpaid, and every retry then hit a dead intent.
+ *
+ * Idempotent: does nothing unless the row is still "pending".
+ */
+const markPaymentPaid = async (payment: any, pi: any): Promise<boolean> => {
+  // Claim the row atomically so a webhook and a reopened checkout racing each
+  // other can't both fire the notifications.
+  const claimed = await Payment.findOneAndUpdate(
+    { _id: payment._id, status: "pending" },
+    {
+      status: "paid_held",
+      stripeChargeId:
+        typeof pi.latest_charge === "string"
+          ? pi.latest_charge
+          : pi.latest_charge?.id,
+    },
+    { new: true },
+  );
+  if (!claimed) return false;
+
+  // Retire any other unpaid attempt on this schedule. It can never be paid
+  // now, and leaving it around lets "latest payment" lookups show its amounts
+  // instead of the ones the host was actually charged.
+  await voidOtherPendingForSchedule(
+    String(claimed.schedule),
+    String(claimed._id),
+  );
+
+  // Fund the escrow and move the job into "in_progress" so the cleaner
+  // can start. Only advance from "accepted" — never clobber a later state.
+  const sched = await CleaningSchedule.findById(claimed.schedule);
+  if (sched) {
+    sched.paymentStatus = "paid_held";
+    if (sched.status === "accepted") sched.status = "in_progress";
+    await sched.save();
+  }
+
+  await NotificationService.createNotification({
+    user: String(claimed.cleaner),
+    title: "Payment received",
+    message:
+      "The host's payment is secured. You can start the cleaning — you'll be paid on approval.",
+    titleFr: "Paiement reçu",
+    messageFr:
+      "Le paiement de l'hôte est sécurisé. Vous pouvez commencer le nettoyage — vous serez payé après validation.",
+    type: "general",
+    data: { scheduleId: String(claimed.schedule) },
+  });
+
+  // admin/super-admin dashboard: a new payment landed in escrow
+  await NotificationService.notifyAdmins({
+    title: "New payment received",
+    message: `A host paid ${(claimed.amount / 100).toFixed(2)} ${claimed.currency.toUpperCase()} — funds held in escrow.`,
+    titleFr: "Nouveau paiement reçu",
+    messageFr: `Un hôte a payé ${(claimed.amount / 100).toFixed(2)} ${claimed.currency.toUpperCase()} — fonds conservés sous séquestre.`,
+    type: "payment_received",
+    data: {
+      scheduleId: String(claimed.schedule),
+      paymentId: String(claimed._id),
+    },
+  });
+
+  return true;
 };
 
 // ─── Stripe webhook handler ───────────────────────────────────────────────────
@@ -214,48 +385,7 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
           { stripePaymentIntentId: pi.id },
         ],
       });
-      if (payment && payment.status === "pending") {
-        payment.status = "paid_held";
-        payment.stripeChargeId =
-          typeof pi.latest_charge === "string"
-            ? pi.latest_charge
-            : pi.latest_charge?.id;
-        await payment.save();
-
-        // Fund the escrow and move the job into "in_progress" so the cleaner
-        // can start. Only advance from "accepted" — never clobber a later state.
-        const sched = await CleaningSchedule.findById(payment.schedule);
-        if (sched) {
-          sched.paymentStatus = "paid_held";
-          if (sched.status === "accepted") sched.status = "in_progress";
-          await sched.save();
-        }
-
-        await NotificationService.createNotification({
-          user: String(payment.cleaner),
-          title: "Payment received",
-          message:
-            "The host's payment is secured. You can start the cleaning — you'll be paid on approval.",
-          titleFr: "Paiement reçu",
-          messageFr:
-            "Le paiement de l'hôte est sécurisé. Vous pouvez commencer le nettoyage — vous serez payé après validation.",
-          type: "general",
-          data: { scheduleId: String(payment.schedule) },
-        });
-
-        // admin/super-admin dashboard: a new payment landed in escrow
-        await NotificationService.notifyAdmins({
-          title: "New payment received",
-          message: `A host paid ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} — funds held in escrow.`,
-          titleFr: "Nouveau paiement reçu",
-          messageFr: `Un hôte a payé ${(payment.amount / 100).toFixed(2)} ${payment.currency.toUpperCase()} — fonds conservés sous séquestre.`,
-          type: "payment_received",
-          data: {
-            scheduleId: String(payment.schedule),
-            paymentId: String(payment._id),
-          },
-        });
-      }
+      if (payment) await markPaymentPaid(payment, pi);
       break;
     }
 
@@ -455,28 +585,41 @@ const toAggMatch = (filter: any) => {
   return match;
 };
 
-const buildList = async (filter: any, query: Record<string, unknown>) => {
+const buildList = async (
+  filter: any,
+  query: Record<string, unknown>,
+  // A cleaner is shown their own rate everywhere — never the host's total or
+  // the platform fee stacked on top of it.
+  asCleaner = false,
+) => {
   const page = Number(query.page) || 1;
   const limit = Number(query.limit) || 10;
   const skip = (page - 1) * limit;
   if (query.status) filter.status = query.status;
 
-  const [data, total, summaryAgg] = await Promise.all([
+  const amountField = asCleaner ? "$cleanerAmount" : "$amount";
+
+  const [rows, total, summaryAgg] = await Promise.all([
     Payment.find(filter)
       .populate("host", "firstName lastName name email")
       .populate("cleaner", "firstName lastName name email")
       .populate("accommodation", "name address city zipCode")
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit),
+      .limit(limit)
+      .lean(),
     Payment.countDocuments(filter),
     // Count + total across ALL matching payments (not just this page) so the
     // summary cards reflect the whole dataset, computed on the DB side.
     Payment.aggregate([
       { $match: toAggMatch(filter) },
-      { $group: { _id: null, totalAmount: { $sum: "$amount" }, count: { $sum: 1 } } },
+      { $group: { _id: null, totalAmount: { $sum: amountField }, count: { $sum: 1 } } },
     ]),
   ]);
+
+  const data = asCleaner
+    ? rows.map((p: any) => ({ ...p, amount: p.cleanerAmount, platformFee: 0 }))
+    : rows;
 
   const sumCents = summaryAgg[0]?.totalAmount || 0;
   const count = summaryAgg[0]?.count || 0;
@@ -501,8 +644,9 @@ const listMyPayments = (
   role: string,
   query: Record<string, unknown>,
 ) => {
-  const filter = role === "cleaner" ? { cleaner: userId } : { host: userId };
-  return buildList(filter, query);
+  const isCleaner = role === "cleaner";
+  const filter = isCleaner ? { cleaner: userId } : { host: userId };
+  return buildList(filter, query, isCleaner);
 };
 
 // ─── Revenue dashboard (host = spend, cleaner = earnings) ─────────────────────
@@ -690,8 +834,10 @@ const getTransactionDetail = async (
     _id: String(p._id),
     status: p.status,
     currency: p.currency,
-    amount: toUnits(p.amount),
-    platformFee: toUnits(p.platformFee),
+    // The platform fee is the host's cost, added on top of the cleaner's rate.
+    // A cleaner only ever sees their own rate — never the host's total or fee.
+    amount: toUnits(isCleaner ? p.cleanerAmount : p.amount),
+    platformFee: isCleaner ? 0 : toUnits(p.platformFee),
     cleanerAmount: toUnits(p.cleanerAmount),
     // The amount that matters to the viewer.
     yourAmount: toUnits(isCleaner ? p.cleanerAmount : p.amount),
@@ -705,6 +851,7 @@ const getTransactionDetail = async (
 };
 
 export const PaymentService = {
+  getFeePercent,
   createConnectAccount,
   refreshConnectStatus,
   payForSchedule,

@@ -712,10 +712,23 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
     String(cleaner?._id || cleaner) === userId;
   if (!isParty) throw new AppError(403, "You are not part of this schedule");
 
-  // latest payment for this schedule
-  const latestPayment = await Payment.findOne({ schedule: schedule._id })
-    .sort({ createdAt: -1 })
-    .select("status amount currency createdAt");
+  const isCleanerViewer = String(cleaner?._id || cleaner) === userId;
+
+  // The payment that actually matters for this schedule. A settled one always
+  // wins over a "pending" attempt: an abandoned checkout sheet leaves a pending
+  // row behind, and if it happens to be newer it would otherwise shadow the
+  // amounts the host was really charged.
+  const paymentFields = "status amount currency platformFee cleanerAmount createdAt";
+  const latestPayment =
+    (await Payment.findOne({
+      schedule: schedule._id,
+      status: { $in: ["paid_held", "released", "refunded"] },
+    })
+      .sort({ createdAt: -1 })
+      .select(paymentFields)) ||
+    (await Payment.findOne({ schedule: schedule._id })
+      .sort({ createdAt: -1 })
+      .select(paymentFields));
 
   // How much the host pays the cleaner for this job — same rule as the mission
   // cards: assignment.pricePerCleaning, falling back to accommodation.cleaningRate.
@@ -730,6 +743,13 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
       : undefined) ??
     null;
 
+  // What the host pays on top of the cleaner's rate (host-facing only).
+  const feePercent = await PaymentService.getFeePercent();
+  const payFeeAmount =
+    payAmount != null
+      ? Math.round(((payAmount * feePercent) / 100) * 100) / 100
+      : null;
+
   return {
     // Keep the schedule's own paymentStatus (escrow lifecycle: unpaid /
     // paid_held / released) from the spread below. Do NOT override it with the
@@ -741,12 +761,26 @@ const getScheduleById = async (userId: string, scheduleId: string) => {
     scheduleId: String(schedule._id),
     scheduleStatus: schedule.status,
     scheduleCleanerResponse: cleanerResponseOf(schedule.status),
+    // payAmount is the cleaner's rate. The host is additionally charged the
+    // platform fee on top of it; the cleaner is never shown that.
     payAmount,
     payCurrency: PAY_CURRENCY,
+    ...(isCleanerViewer
+      ? {}
+      : {
+          payFeePercent: feePercent,
+          payFee: payFeeAmount,
+          payTotal: payAmount != null ? payAmount + (payFeeAmount ?? 0) : null,
+        }),
     latestPayment: latestPayment
       ? {
           status: latestPayment.status,
-          amount: latestPayment.amount,
+          // Cleaner sees their payout; host sees what they were charged.
+          amount: isCleanerViewer
+            ? latestPayment.cleanerAmount
+            : latestPayment.amount,
+          cleanerAmount: latestPayment.cleanerAmount,
+          platformFee: isCleanerViewer ? 0 : latestPayment.platformFee,
           currency: latestPayment.currency,
           createdAt: latestPayment.createdAt,
         }

@@ -44,4 +44,19 @@ const paymentSchema = new Schema<IPayment>(
   { timestamps: true },
 );
 
+// At most ONE unpaid attempt per schedule. Opening the checkout sheet twice in
+// quick succession used to race two inserts through, leaving a duplicate
+// "pending" row that later shadowed the real, paid one. The unique index makes
+// the second insert fail loudly so the caller can reuse the first.
+// Named explicitly: the plain `schedule` index above already owns the
+// auto-generated "schedule_1", and a name collision aborts the index build.
+paymentSchema.index(
+  { schedule: 1 },
+  {
+    name: "schedule_pending_unique",
+    unique: true,
+    partialFilterExpression: { status: "pending" },
+  },
+);
+
 export const Payment = model<IPayment>("Payment", paymentSchema);

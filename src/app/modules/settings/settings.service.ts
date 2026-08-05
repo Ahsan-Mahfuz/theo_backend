@@ -15,6 +15,13 @@ const getSettings = async () => {
   return settings;
 };
 
+// The slice any signed-in user may read: the commission the host is charged on
+// top of the cleaning rate, so the app can show the same breakdown as checkout.
+const getPublicSettings = async () => {
+  const settings = await getSettings();
+  return { platformCommission: settings.platformCommission };
+};
+
 const updateSettings = async (payload: {
   platformCommission?: number;
   icalSyncInterval?: number;
@@ -38,5 +45,6 @@ const updateSettings = async (payload: {
 
 export const SettingsService = {
   getSettings,
+  getPublicSettings,
   updateSettings,
 };
