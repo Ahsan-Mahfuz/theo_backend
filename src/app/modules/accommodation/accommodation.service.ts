@@ -510,6 +510,23 @@ const buildRecommendations = async (
       // skip if the checkout day already has a cleaning scheduled
       if (scheduledDays.get(accKey)?.has(dayKey(checkout))) continue;
 
+      const formatIcalTime = (d?: Date | null): string | null => {
+        if (!d) return null;
+        const dateObj = new Date(d);
+        if (isNaN(dateObj.getTime())) return null;
+        if (dateObj.getUTCHours() === 0 && dateObj.getUTCMinutes() === 0) return null;
+        return hhmm(dateObj);
+      };
+
+      const outTime = formatIcalTime(checkout);
+      const inTime = formatIcalTime(freeUntil);
+      const isInvalidTime =
+        !outTime ||
+        !inTime ||
+        outTime === inTime ||
+        (outTime === "06:00" && inTime === "06:00") ||
+        (outTime === "00:00" && inTime === "00:00");
+
       recommendations.push({
         accommodation: {
           _id: accDoc._id,
@@ -523,8 +540,8 @@ const buildRecommendations = async (
         recommendedDate: checkout,
         freeFrom: checkout,
         freeUntil,
-        checkOutTime: hhmm(checkout),
-        checkInTime: freeUntil ? hhmm(freeUntil) : null,
+        checkOutTime: isInvalidTime ? null : outTime,
+        checkInTime: isInvalidTime ? null : inTime,
         booking: {
           _id: current._id,
           summary: current.summary,
